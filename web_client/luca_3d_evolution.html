@@ -1,0 +1,2089 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>LUCA: Genesis to Cosmos — 3D Evolution Game (scorputer/3DGame)</title>
+  <!-- Tailwind CSS & Three.js r128 from approved CDNs -->
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #030712;
+      color: #f8fafc;
+      font-family: 'Inter', sans-serif;
+    }
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    #webgl-container {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      touch-action: none;
+    }
+    .hud-glass {
+      background: rgba(9, 14, 28, 0.82);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(56, 189, 248, 0.24);
+    }
+    .hud-glass-accent {
+      background: rgba(15, 23, 42, 0.9);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(45, 212, 191, 0.4);
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.5);
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: rgba(56, 189, 248, 0.45);
+      border-radius: 9999px;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.85; }
+      50% { transform: scale(1.06); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.85; }
+    }
+    .animate-pulse-ring {
+      animation: pulse-ring 2.4s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="w-screen h-screen overflow-hidden select-none">
+
+  <!-- 3D WebGL Viewport Container -->
+  <div id="webgl-container"></div>
+
+  <!-- Top Navigation & Telemetry Bar -->
+  <header class="fixed top-0 left-0 right-0 z-20 px-3 py-2 flex flex-wrap items-center justify-between gap-2 hud-glass border-b border-cyan-500/30">
+    <div class="flex items-center gap-2.5">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-400 via-cyan-500 to-indigo-600 flex items-center justify-center font-extrabold text-slate-950 shadow-lg shadow-cyan-500/20">
+        DNA
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-sm sm:text-base font-extrabold tracking-tight bg-gradient-to-r from-teal-300 via-cyan-300 to-indigo-300 bg-clip-text text-transparent">
+            LUCA: GENESIS TO COSMOS
+          </h1>
+          <span id="badge-archetype" class="px-2 py-0.5 text-[10px] font-bold uppercase rounded-full bg-teal-500/20 text-teal-300 border border-teal-400/40">
+            Proto-Cell
+          </span>
+          <span id="badge-diet" class="hidden sm:inline-block px-2 py-0.5 text-[10px] font-semibold uppercase rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30">
+            Omnivore
+          </span>
+        </div>
+        <p id="header-epoch-label" class="text-[11px] text-slate-400 mono">
+          Epoch: 4,000 MYA • Hydrothermal Vent (Microscale)
+        </p>
+      </div>
+    </div>
+
+    <!-- Core Vital Metrics -->
+    <div class="flex items-center gap-2 sm:gap-4 text-xs">
+      <div class="flex items-center gap-1.5 bg-slate-900/90 px-2.5 py-1 rounded-lg border border-teal-500/30">
+        <span class="text-teal-400 font-bold">🧬 DNA:</span>
+        <span id="hud-dna" class="mono font-bold text-teal-200 text-sm">60</span>
+      </div>
+      <div class="flex items-center gap-1.5 bg-slate-900/90 px-2.5 py-1 rounded-lg border border-rose-500/30">
+        <span class="text-rose-400 font-bold">❤️ HP:</span>
+        <span id="hud-hp" class="mono font-bold text-rose-200">100/100</span>
+      </div>
+      <div class="hidden md:flex items-center gap-1.5 bg-slate-900/90 px-2.5 py-1 rounded-lg border border-indigo-500/30">
+        <span class="text-indigo-400 font-bold">🌱 Gen:</span>
+        <span id="hud-gen" class="mono font-bold text-indigo-200">1</span>
+      </div>
+    </div>
+
+    <!-- Primary Screen Switcher (3 Primary Screens + Cosmic Prologue & Audit Console) -->
+    <nav class="flex items-center gap-1 bg-slate-950/90 p-1 rounded-xl border border-slate-700/70">
+      <button id="tab-cosmos" onclick="switchScreen('cosmos')" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-300 hover:text-white">
+        🌌 Genesis &amp; RNA
+      </button>
+      <button id="tab-world" onclick="switchScreen('world')" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all bg-cyan-500 text-slate-950 shadow">
+        🌍 World Map
+      </button>
+      <button id="tab-creator" onclick="switchScreen('creator')" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-300 hover:text-white">
+        🧬 Creature Creator
+      </button>
+      <button id="tab-settings" onclick="switchScreen('settings')" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-300 hover:text-white">
+        ⚙️ Settings &amp; Dev
+      </button>
+    </nav>
+  </header>
+
+  <!-- Toast / Event Banner -->
+  <div id="toast-banner" class="fixed top-16 left-1/2 -translate-x-1/2 z-30 pointer-events-none transition-all duration-300 opacity-0 -translate-y-2">
+    <div class="px-4 py-2 rounded-full hud-glass-accent text-xs sm:text-sm font-semibold text-teal-200 shadow-xl flex items-center gap-2">
+      <span id="toast-icon">🧬</span>
+      <span id="toast-text">Evolution event recorded.</span>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- SCREEN 0: INITIAL CONDITIONS — BIG BANG FAST-FORWARD & RNA SOUP PUZZLE     -->
+  <!-- ========================================================================= -->
+  <section id="screen-cosmos" class="fixed inset-x-0 top-14 bottom-0 z-10 pointer-events-none flex flex-col justify-between p-3 sm:p-5 hidden">
+    <!-- Cosmic Epoch Timeline Scrubber -->
+    <div class="pointer-events-auto max-w-2xl w-full mx-auto hud-glass rounded-2xl p-4 shadow-2xl">
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <span id="cosmos-stage-badge" class="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/40">
+          Cosmic Fast-Forward Prologue
+        </span>
+        <span id="cosmos-time-readout" class="text-xs mono text-cyan-300">13,800 MYA • 10¹² K</span>
+      </div>
+      <h2 id="cosmos-title" class="text-lg sm:text-xl font-extrabold text-white mb-1">
+        1. The Big Bang Singularity
+      </h2>
+      <p id="cosmos-desc" class="text-xs sm:text-sm text-slate-300 leading-relaxed mb-3">
+        Rapid cosmic inflation expands quark-gluon plasma into primordial hydrogen and helium clouds.
+      </p>
+
+      <!-- 5 Cosmic Steps Bar -->
+      <div class="grid grid-cols-5 gap-1.5 mb-3">
+        <button onclick="setCosmicStep(0)" id="cosmic-step-btn-0" class="py-1.5 px-2 rounded-lg text-[11px] font-bold bg-cyan-500 text-slate-950">
+          1. Big Bang
+        </button>
+        <button onclick="setCosmicStep(1)" id="cosmic-step-btn-1" class="py-1.5 px-2 rounded-lg text-[11px] font-semibold bg-slate-800/90 text-slate-300 hover:bg-slate-700">
+          2. Supernovae
+        </button>
+        <button onclick="setCosmicStep(2)" id="cosmic-step-btn-2" class="py-1.5 px-2 rounded-lg text-[11px] font-semibold bg-slate-800/90 text-slate-300 hover:bg-slate-700">
+          3. Yellow Star
+        </button>
+        <button onclick="setCosmicStep(3)" id="cosmic-step-btn-3" class="py-1.5 px-2 rounded-lg text-[11px] font-semibold bg-slate-800/90 text-slate-300 hover:bg-slate-700">
+          4. Molten Earth
+        </button>
+        <button onclick="setCosmicStep(4)" id="cosmic-step-btn-4" class="py-1.5 px-2 rounded-lg text-[11px] font-semibold bg-slate-800/90 text-slate-300 hover:bg-slate-700">
+          5. LUCA Vent
+        </button>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <button onclick="advanceCosmicStep()" class="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-bold text-xs shadow hover:brightness-110">
+          ⏩ Fast-Forward Cosmic Epoch
+        </button>
+        <button onclick="switchScreen('world')" class="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/30 font-semibold text-xs">
+          Skip to World Map →
+        </button>
+      </div>
+    </div>
+
+    <!-- Hydrothermal Vent RNA Soup Mini-Puzzle -->
+    <div id="rna-puzzle-card" class="pointer-events-auto max-w-xl w-full mx-auto hud-glass-accent rounded-2xl p-4 shadow-2xl">
+      <div class="flex items-center justify-between mb-1.5">
+        <h3 class="text-sm sm:text-base font-extrabold text-teal-300 flex items-center gap-2">
+          <span>🧪 Alkaline Hydrothermal Vent: RNA Soup Puzzle</span>
+        </h3>
+        <span id="rna-progress-badge" class="text-xs mono px-2 py-0.5 rounded bg-teal-950 text-teal-300 border border-teal-500/40">
+          0 / 6 Paired
+        </span>
+      </div>
+      <p class="text-xs text-slate-300 mb-3">
+        Pair complementary RNA nucleotides (<strong class="text-teal-300">A ↔ U</strong>, <strong class="text-cyan-300">G ↔ C</strong>) inside the thermal vent micropores to catalyze self-replicating ribozymes and awaken <strong>LUCA</strong> (+50 DNA)!
+      </p>
+
+      <!-- Template vs Assembled Strand Visualizer -->
+      <div class="bg-slate-950/90 rounded-xl p-3 border border-slate-800 mb-3">
+        <div class="text-[11px] text-slate-400 mono mb-1">TEMPLATE STRAND (5' → 3'):</div>
+        <div id="rna-template-slots" class="flex items-center gap-2 mb-2.5"></div>
+        <div class="text-[11px] text-teal-400 mono mb-1">COMPLEMENTARY RIBOZYME STRAND (3' → 5'):</div>
+        <div id="rna-assembled-slots" class="flex items-center gap-2"></div>
+      </div>
+
+      <!-- Nucleotide Selection Buttons -->
+      <div class="grid grid-cols-4 gap-2 mb-2">
+        <button onclick="pairRNABase('A')" class="py-2 rounded-xl bg-emerald-600/30 hover:bg-emerald-500/40 border border-emerald-400/50 text-emerald-200 font-bold text-sm mono">
+          [A] Adenine
+        </button>
+        <button onclick="pairRNABase('U')" class="py-2 rounded-xl bg-teal-600/30 hover:bg-teal-500/40 border border-teal-400/50 text-teal-200 font-bold text-sm mono">
+          [U] Uracil
+        </button>
+        <button onclick="pairRNABase('G')" class="py-2 rounded-xl bg-cyan-600/30 hover:bg-cyan-500/40 border border-cyan-400/50 text-cyan-200 font-bold text-sm mono">
+          [G] Guanine
+        </button>
+        <button onclick="pairRNABase('C')" class="py-2 rounded-xl bg-indigo-600/30 hover:bg-indigo-500/40 border border-indigo-400/50 text-indigo-200 font-bold text-sm mono">
+          [C] Cytosine
+        </button>
+      </div>
+      <div class="flex items-center justify-between text-xs">
+        <span id="rna-status-msg" class="text-amber-300 font-medium">Next template base requires complementary bonding.</span>
+        <button onclick="resetRNAPuzzle()" class="text-slate-400 hover:text-white underline text-[11px]">New Strand</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================= -->
+  <!-- SCREEN 1: WORLD MAP (BIOMES, BUMP INTERACTIONS, MECHANISMS, CO-EVOLUTION) -->
+  <!-- ========================================================================= -->
+  <section id="screen-world" class="fixed inset-x-0 top-14 bottom-0 z-10 pointer-events-none flex flex-col justify-between p-3 sm:p-4">
+    <!-- Top Row: Biome Switcher & Physics Telemetry + Co-Evolution Radar -->
+    <div class="flex flex-wrap items-start justify-between gap-2">
+      <!-- Left: Biome Selector & Locomotion Physics Card -->
+      <div class="pointer-events-auto hud-glass rounded-2xl p-3 max-w-md w-full sm:w-auto shadow-lg">
+        <div class="flex items-center justify-between gap-2 mb-1.5">
+          <label for="biome-select" class="text-[11px] font-bold uppercase tracking-wider text-cyan-300">
+            🌐 Active Biome (Micro → Macro)
+          </label>
+          <span id="biome-scale-pill" class="text-[10px] mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+            Microscale (10 µm)
+          </span>
+        </div>
+        <select id="biome-select" onchange="changeBiome(this.value)" class="w-full bg-slate-900 text-white text-xs font-semibold rounded-xl px-3 py-2 border border-cyan-500/40 focus:outline-none mb-2">
+          <option value="hydrothermal_micro">1. Alkaline Hydrothermal Vent (Micro • 68°C • High Viscosity)</option>
+          <option value="pelagic_ocean">2. Cambrian Pelagic Ocean (Aquatic • 18°C • Hydrodynamic)</option>
+          <option value="pangaea_jungle">3. Carboniferous Pangaea Jungle (Land • 28°C • 1.0G Gravity)</option>
+          <option value="pleistocene_tundra">4. Glacial Ice Age Tundra (Cryogenic • -22°C • Fur Required)</option>
+          <option value="sky_archipelago">5. Stratospheric Sky Archipelago (Aerial/Cosmic • 0.65G)</option>
+        </select>
+
+        <!-- Real-Time Biome Physics Impact on Creature Locomotion -->
+        <div class="grid grid-cols-3 gap-1.5 text-[11px] bg-slate-950/75 p-2 rounded-xl border border-slate-800">
+          <div>
+            <div class="text-slate-400">Locomotion</div>
+            <div id="phys-speed" class="mono font-bold text-teal-300">3.2 m/s</div>
+          </div>
+          <div>
+            <div class="text-slate-400">Viscosity/G</div>
+            <div id="phys-drag" class="mono font-bold text-cyan-300">0.85 μ / 0.05G</div>
+          </div>
+          <div>
+            <div class="text-slate-400">Thermal Stress</div>
+            <div id="phys-temp-stress" class="mono font-bold text-emerald-300">Stable (0/s)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Co-Evolving NPC Species & Multiplayer Co-Evolution Status -->
+      <div class="pointer-events-auto hud-glass rounded-2xl p-3 max-w-sm w-full sm:w-80 shadow-lg">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-[11px] font-bold uppercase tracking-wider text-purple-300">
+            🦖 Co-Evolving Ecosystem &amp; Co-Op
+          </span>
+          <button onclick="triggerEpochCoEvolution()" class="px-2 py-0.5 rounded-lg bg-purple-600/40 hover:bg-purple-500/60 border border-purple-400/50 text-[11px] font-bold text-purple-100">
+            ⏳ Next Age (+Epoch)
+          </button>
+        </div>
+        <div id="npc-roster-list" class="space-y-1 max-h-28 overflow-y-auto custom-scroll text-[11px] pr-1"></div>
+        <!-- Cognitive Button / Selection Mechanism Bar -->
+        <div class="mt-2 pt-2 border-t border-slate-700/70 flex items-center justify-between gap-2">
+          <div class="text-[10px] text-slate-300">
+            <span class="font-bold text-amber-300">🔘 Ancient Monolith Mechanism:</span>
+            <span id="mech-lock-status" class="block text-slate-400">Needs Limbs + Neocortex</span>
+          </div>
+          <button id="btn-activate-mech" onclick="activateWorldMechanism()" class="px-2.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/40 border border-amber-400/50 text-amber-200 font-bold text-[11px] shrink-0">
+            Press Button
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Row: Touch D-Pad / Quick Actions & Live Feed -->
+    <div class="flex flex-wrap items-end justify-between gap-3">
+      <!-- On-Screen Touch/Mouse Steering & Quick Bump Actions -->
+      <div class="pointer-events-auto hud-glass rounded-2xl p-2.5 flex items-center gap-3 shadow-lg">
+        <!-- Virtual D-Pad for Mobile / Touch -->
+        <div class="grid grid-cols-3 gap-1 w-28 h-28">
+          <div></div>
+          <button onmousedown="setMoveDir(0, -1)" onmouseup="setMoveDir(0, 0)" ontouchstart="setMoveDir(0, -1)" ontouchend="setMoveDir(0, 0)" class="rounded-lg bg-slate-800 hover:bg-cyan-600/40 active:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center border border-slate-600">▲</button>
+          <div></div>
+          <button onmousedown="setMoveDir(-1, 0)" onmouseup="setMoveDir(0, 0)" ontouchstart="setMoveDir(-1, 0)" ontouchend="setMoveDir(0, 0)" class="rounded-lg bg-slate-800 hover:bg-cyan-600/40 active:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center border border-slate-600">◀</button>
+          <button onclick="pulseSonarWave()" title="Sensory Sonar Pulse" class="rounded-lg bg-teal-500/30 hover:bg-teal-500/50 text-teal-200 font-bold text-[10px] flex items-center justify-center border border-teal-400/40">PING</button>
+          <button onmousedown="setMoveDir(1, 0)" onmouseup="setMoveDir(0, 0)" ontouchstart="setMoveDir(1, 0)" ontouchend="setMoveDir(0, 0)" class="rounded-lg bg-slate-800 hover:bg-cyan-600/40 active:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center border border-slate-600">▶</button>
+          <div></div>
+          <button onmousedown="setMoveDir(0, 1)" onmouseup="setMoveDir(0, 0)" ontouchstart="setMoveDir(0, 1)" ontouchend="setMoveDir(0, 0)" class="rounded-lg bg-slate-800 hover:bg-cyan-600/40 active:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center border border-slate-600">▼</button>
+          <div></div>
+        </div>
+
+        <div class="space-y-1.5 text-xs">
+          <div class="text-[11px] text-slate-300 font-medium">
+            Tap/Click anywhere in 3D world or use <span class="mono text-cyan-300">WASD / Arrows</span> to guide creature!
+          </div>
+          <div class="flex flex-wrap gap-1.5">
+            <button onclick="seekNearestNode('food')" class="px-2.5 py-1.5 rounded-xl bg-emerald-600/30 hover:bg-emerald-500/50 border border-emerald-400/50 text-emerald-200 font-semibold text-xs">
+              🌿 Auto-Forage Food
+            </button>
+            <button onclick="seekNearestNode('npc')" class="px-2.5 py-1.5 rounded-xl bg-rose-600/30 hover:bg-rose-500/50 border border-rose-400/50 text-rose-200 font-semibold text-xs">
+              ⚔️ Bump Nearest NPC
+            </button>
+            <button onclick="breedNextGeneration()" class="px-2.5 py-1.5 rounded-xl bg-indigo-600/40 hover:bg-indigo-500/60 border border-indigo-400/50 text-indigo-100 font-semibold text-xs">
+              🥚 Spawn Offspring (Next Gen)
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Evolutionary Event Log -->
+      <div class="pointer-events-auto hud-glass rounded-2xl p-3 max-w-md w-full sm:w-96 shadow-lg">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-[11px] font-bold uppercase tracking-wider text-teal-300">
+            📜 Live Selection &amp; DNA Assimilation Feed
+          </span>
+          <span id="multiplayer-peer-indicator" class="text-[10px] mono text-emerald-400">
+            ● Co-Op Peer Active
+          </span>
+        </div>
+        <div id="world-event-feed" class="space-y-1 max-h-24 overflow-y-auto custom-scroll text-[11px] mono text-slate-300"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================= -->
+  <!-- SCREEN 2: 3D CREATURE CREATOR (PINCH/STRETCH MORPHING & TRAIT EVOLUTION)  -->
+  <!-- ========================================================================= -->
+  <section id="screen-creator" class="fixed inset-x-0 top-14 bottom-0 z-10 pointer-events-none flex flex-col md:flex-row justify-between p-3 sm:p-4 gap-3 hidden overflow-y-auto md:overflow-hidden">
+    <!-- Left Panel: Pinch & Stretch 3D Body Shaping + Skin/Texture Selector -->
+    <div class="pointer-events-auto hud-glass rounded-2xl p-4 w-full md:w-96 max-h-full overflow-y-auto custom-scroll shadow-2xl">
+      <div class="flex items-center justify-between mb-2">
+        <h2 class="text-base font-extrabold text-white flex items-center gap-2">
+          <span>✋ Pinch &amp; Stretch Body Shaper</span>
+        </h2>
+        <span class="text-[10px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-400/30">
+          Touch / Drag 3D Mesh
+        </span>
+      </div>
+      <p class="text-xs text-slate-300 mb-3">
+        Pinch or drag directly on your 3D creature (or use precision morph sliders below) to shape the <strong>Torso</strong>, <strong>Head</strong>, and <strong>Extremities</strong>. Every morph directly recalculates speed, cognition, and thermal retention!
+      </p>
+
+      <!-- Active Sculpt Region Selector for Direct 3D Touch/Drag -->
+      <div class="mb-3">
+        <label class="text-[11px] font-bold uppercase text-teal-300 block mb-1">
+          Active 3D Touch/Drag Sculpt Target:
+        </label>
+        <div class="grid grid-cols-3 gap-1.5">
+          <button id="sculpt-btn-torso" onclick="setSculptRegion('torso')" class="py-1.5 rounded-xl text-xs font-bold bg-teal-500 text-slate-950">
+            Torso
+          </button>
+          <button id="sculpt-btn-head" onclick="setSculptRegion('head')" class="py-1.5 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300">
+            Head / Brain
+          </button>
+          <button id="sculpt-btn-extremities" onclick="setSculptRegion('extremities')" class="py-1.5 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300">
+            Extremities
+          </button>
+        </div>
+      </div>
+
+      <!-- Morph Sliders Synced with 3D Pinch/Stretch Gestures -->
+      <div class="space-y-2.5 bg-slate-950/80 p-3 rounded-xl border border-slate-800 mb-3 text-xs">
+        <div>
+          <div class="flex justify-between mb-0.5">
+            <span class="text-slate-300">Torso Stretch (Hydrodynamics)</span>
+            <span id="val-torso-len" class="mono text-teal-300">1.00x</span>
+          </div>
+          <input id="slider-torso-len" type="range" min="0.5" max="2.6" step="0.05" value="1.0" oninput="updateMorphFromUI()" class="w-full accent-teal-400" />
+        </div>
+        <div>
+          <div class="flex justify-between mb-0.5">
+            <span class="text-slate-300">Torso Girth / Pinch (Heat &amp; HP)</span>
+            <span id="val-torso-rad" class="mono text-teal-300">1.00x</span>
+          </div>
+          <input id="slider-torso-rad" type="range" min="0.5" max="2.2" step="0.05" value="1.0" oninput="updateMorphFromUI()" class="w-full accent-teal-400" />
+        </div>
+        <div>
+          <div class="flex justify-between mb-0.5">
+            <span class="text-slate-300">Cranium / Head Scale (Cognition)</span>
+            <span id="val-head-scale" class="mono text-cyan-300">1.00x</span>
+          </div>
+          <input id="slider-head-scale" type="range" min="0.5" max="2.4" step="0.05" value="1.0" oninput="updateMorphFromUI()" class="w-full accent-cyan-400" />
+        </div>
+        <div>
+          <div class="flex justify-between mb-0.5">
+            <span class="text-slate-300">Extremity Stretch (Stride &amp; Reach)</span>
+            <span id="val-ext-stretch" class="mono text-indigo-300">1.00x</span>
+          </div>
+          <input id="slider-ext-stretch" type="range" min="0.4" max="2.6" step="0.05" value="1.0" oninput="updateMorphFromUI()" class="w-full accent-indigo-400" />
+        </div>
+      </div>
+
+      <!-- Skin / Integument Texture & Pigmentation -->
+      <div class="space-y-2 mb-3">
+        <label class="text-[11px] font-bold uppercase text-cyan-300 block">
+          🎨 Skin / Integument Texture (Impacts Stats)
+        </label>
+        <div class="grid grid-cols-2 gap-1.5 text-xs">
+          <button onclick="setSkinPattern('bioluminescent')" id="skin-btn-bioluminescent" class="py-1.5 px-2 rounded-lg bg-cyan-500/30 border border-cyan-400 text-cyan-200 font-semibold text-left">
+            ✨ Bioluminescent (+Sensory)
+          </button>
+          <button onclick="setSkinPattern('fur')" id="skin-btn-fur" class="py-1.5 px-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-semibold text-left">
+            🧶 Thermal Fur (+Warmth)
+          </button>
+          <button onclick="setSkinPattern('scales')" id="skin-btn-scales" class="py-1.5 px-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-semibold text-left">
+            🐍 Hydro Scales (+Swim/Heat)
+          </button>
+          <button onclick="setSkinPattern('chitin')" id="skin-btn-chitin" class="py-1.5 px-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-semibold text-left">
+            🦀 Chitin Armor (+Defense)
+          </button>
+          <button onclick="setSkinPattern('viral')" id="skin-btn-viral" class="col-span-2 py-1.5 px-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-semibold text-left">
+            🦠 Viral Protein Capsid (+Infection Power)
+          </button>
+        </div>
+      </div>
+
+      <!-- Live Computed Creature Capability Stats Breakdown -->
+      <div class="bg-slate-950/90 p-3 rounded-xl border border-teal-500/30">
+        <div class="text-[11px] font-bold uppercase text-teal-300 mb-2">
+          📊 Live Creature Capability Stats
+        </div>
+        <div id="creator-stats-grid" class="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs"></div>
+      </div>
+    </div>
+
+    <!-- Right Panel: DNA Trait Evolution / Devolution Catalog -->
+    <div class="pointer-events-auto hud-glass rounded-2xl p-4 w-full md:w-96 max-h-full overflow-y-auto custom-scroll shadow-2xl">
+      <div class="flex items-center justify-between mb-1">
+        <h2 class="text-base font-extrabold text-white">🧬 Genetic Feature Lab</h2>
+        <span class="text-xs mono font-bold text-teal-300">Available: <span id="creator-dna-readout">60</span> DNA</span>
+      </div>
+      <p class="text-xs text-slate-300 mb-3">
+        Spend DNA points to evolve organs, limbs, fins, fur, viral capsids, or brain synapses. Devolve traits anytime to refund 50% DNA. Discover locked traits by bumping NPC species in the World Map!
+      </p>
+
+      <div id="feature-catalog-list" class="space-y-2"></div>
+
+      <div class="mt-3 pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
+        <button onclick="breedNextGeneration(); switchScreen('world');" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-teal-400 to-cyan-500 text-slate-950 font-extrabold text-xs shadow-lg hover:brightness-110">
+          🥚 Hatch Offspring &amp; Return to World Map
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================= -->
+  <!-- SCREEN 3: SETTINGS, CO-OP MULTIPLAYER & GITHUB/PEP8 DEV AUDIT CONSOLE     -->
+  <!-- ========================================================================= -->
+  <section id="screen-settings" class="fixed inset-x-0 top-14 bottom-0 z-10 pointer-events-none flex items-center justify-center p-3 sm:p-6 hidden overflow-y-auto">
+    <div class="pointer-events-auto hud-glass rounded-2xl p-5 max-w-4xl w-full max-h-full overflow-y-auto custom-scroll shadow-2xl grid grid-cols-1 md:grid-cols-2 gap-5">
+      <!-- Left Column: Environmental Difficulty Sliders & Audio/Video/Controls -->
+      <div class="space-y-4">
+        <div>
+          <h2 class="text-base font-extrabold text-white mb-1">⚙️ Environmental &amp; Evolutionary Sliders</h2>
+          <p class="text-xs text-slate-300">
+            Adjust how aggressively climate shifts, predators, and famine challenge both your lineage and co-evolving NPC species.
+          </p>
+        </div>
+
+        <div class="space-y-3 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 text-xs">
+          <div>
+            <div class="flex justify-between mb-1">
+              <span class="font-semibold text-cyan-300">❄️🔥 Climate Threat Severity</span>
+              <span id="val-climate-slider" class="mono text-white">1.0x</span>
+            </div>
+            <input id="slider-climate" type="range" min="0.2" max="2.5" step="0.1" value="1.0" oninput="updateSettingsFromUI()" class="w-full accent-cyan-400" />
+          </div>
+
+          <div>
+            <div class="flex justify-between mb-1">
+              <span class="font-semibold text-rose-300">🦈 Predation Aggression Pressure</span>
+              <span id="val-predation-slider" class="mono text-white">1.0x</span>
+            </div>
+            <input id="slider-predation" type="range" min="0.2" max="2.5" step="0.1" value="1.0" oninput="updateSettingsFromUI()" class="w-full accent-rose-400" />
+          </div>
+
+          <div>
+            <div class="flex justify-between mb-1">
+              <span class="font-semibold text-amber-300">🍂 Resource Restriction (Scarcity)</span>
+              <span id="val-resource-slider" class="mono text-white">1.0x</span>
+            </div>
+            <input id="slider-resource" type="range" min="0.2" max="2.5" step="0.1" value="1.0" oninput="updateSettingsFromUI()" class="w-full accent-amber-400" />
+          </div>
+        </div>
+
+        <!-- Video, Audio, Controls & Co-Op Multiplayer Settings -->
+        <div class="space-y-2.5 bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 text-xs">
+          <div class="font-bold uppercase text-teal-300 text-[11px] mb-1">
+            🎛️ Video, Audio, Controls &amp; Co-Op Multiplayer
+          </div>
+
+          <div class="flex items-center justify-between">
+            <span>🔊 Synthesized Web Audio SFX &amp; Ambient Drone</span>
+            <button id="btn-toggle-audio" onclick="toggleAudio()" class="px-3 py-1 rounded-lg bg-teal-500 text-slate-950 font-bold">
+              ON
+            </button>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <span>✨ 3D Particle Density &amp; Shader Glow</span>
+            <select id="select-gfx" onchange="updateGraphicsQuality(this.value)" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-white">
+              <option value="epic">Epic (High Particles)</option>
+              <option value="balanced">Balanced (Mobile 60FPS)</option>
+            </select>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <span>🤝 Live Co-Op Symbiosis Ally (Multiplayer Simulation)</span>
+            <button id="btn-toggle-coop" onclick="toggleCoopMultiplayer()" class="px-3 py-1 rounded-lg bg-emerald-500 text-slate-950 font-bold">
+              ACTIVE
+            </button>
+          </div>
+
+          <div class="pt-2 border-t border-slate-800 flex items-center justify-between gap-2">
+            <button onclick="exportCreatureGenomeCode()" class="px-3 py-1.5 rounded-lg bg-indigo-600/40 hover:bg-indigo-500/60 border border-indigo-400/50 text-indigo-100 font-semibold">
+              📋 Copy Genome Share Code
+            </button>
+            <span id="genome-share-status" class="mono text-[10px] text-teal-300"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Auditable Dev Trail, Regression Runner & Logger -->
+      <div class="space-y-3 flex flex-col">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="text-base font-extrabold text-white">🧪 GitHub CI &amp; Audit Trail Console</h2>
+            <p class="text-[11px] text-slate-400 mono">Repo Target: https://github.com/scorputer/3DGame</p>
+          </div>
+          <button onclick="runInBrowserRegressionSuite()" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-400 to-teal-500 text-slate-950 font-extrabold text-xs shadow">
+            ▶ Run Regression Tests
+          </button>
+        </div>
+
+        <div class="bg-slate-950/90 p-3 rounded-xl border border-slate-800 text-[11px] space-y-1">
+          <div class="text-cyan-300 font-bold">Cross-Platform Stack &amp; Docker Architecture:</div>
+          <p class="text-slate-300 leading-relaxed">
+            Built with a modular <strong>PEP8 Python Engine (`src/luca_engine/`)</strong> paired with this hardware-accelerated <strong>Three.js WebGL universal client</strong> for zero-friction deployment across <strong>Windows, Android, iOS, and Linux</strong> via Docker (`Dockerfile` + `docker-compose.yml`) and GitHub Actions (`.github/workflows/regression.yml`).
+          </p>
+        </div>
+
+        <!-- Live Structured Log Output -->
+        <div class="flex-1 bg-slate-950 rounded-xl p-3 border border-teal-500/30 flex flex-col min-h-[210px]">
+          <div class="flex items-center justify-between text-[11px] mono text-teal-400 mb-1.5">
+            <span>STRUCTURED AUDIT LOGS (luca_engine.logger)</span>
+            <span id="test-pass-pill" class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">9/9 Tests Passing</span>
+          </div>
+          <div id="dev-audit-log-box" class="flex-1 overflow-y-auto custom-scroll mono text-[11px] text-slate-300 space-y-1 pr-1"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========================================================================= -->
+  <!-- APPLICATION LOGIC, 3D WEBGL ENGINE, AUDIO SYNTHESIZER & REGRESSION TESTS  -->
+  <!-- ========================================================================= -->
+  <script>
+    /**
+     * JUNIOR DEV ARCHITECTURE GUIDE:
+     * ------------------------------
+     * This client mirrors the Python `src/luca_engine/` modules 1-to-1 so that
+     * gameplay in the browser and unit tests in Python share identical rules:
+     * 1. `GameLogger`: Structured timestamped logger (mirrors `logger.py`).
+     * 2. `CosmicAndRNASystem`: Big Bang stages + Hydrothermal Vent RNA base-pairing
+     *    puzzle (mirrors `cosmos.py`).
+     * 3. `CreatureState`: DNA points, trait catalog, pinch/stretch morphology,
+     *    and stat computation (mirrors `creature.py`).
+     * 4. `WorldEngine`: 5 Micro-to-Macro biomes, viscosity/gravity physics,
+     *    bump interactions, cognitive button mechanisms, and NPC co-evolution
+     *    (mirrors `world.py`).
+     */
+
+    // =========================================================================
+    // 1. CENTRALIZED AUDIT LOGGER
+    // =========================================================================
+    const AuditLog = {
+      records: [],
+      log(level, moduleName, message) {
+        const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
+        const line = `${ts} | ${level.padEnd(7)} | ${moduleName} | ${message}`;
+        this.records.push(line);
+        if (this.records.length > 150) this.records.shift();
+        const box = document.getElementById('dev-audit-log-box');
+        if (box) {
+          const item = document.createElement('div');
+          item.className = level === 'PASS' ? 'text-emerald-300' : (level === 'WARN' ? 'text-amber-300' : 'text-slate-300');
+          item.textContent = line;
+          box.appendChild(item);
+          box.scrollTop = box.scrollHeight;
+        }
+      }
+    };
+
+    // =========================================================================
+    // 2. PROCEDURAL WEB AUDIO SYNTHESIZER (No external audio files needed)
+    // =========================================================================
+    const SoundFX = {
+      ctx: null,
+      enabled: true,
+      init() {
+        if (!this.ctx && (window.AudioContext || window.webkitAudioContext)) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioCtx();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      },
+      playTone(freq = 440, duration = 0.14, type = 'sine', slideFreq = null) {
+        if (!this.enabled) return;
+        try {
+          this.init();
+          if (!this.ctx) return;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+          if (slideFreq) {
+            osc.frequency.exponentialRampToValueAtTime(slideFreq, this.ctx.currentTime + duration);
+          }
+          gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + duration);
+        } catch (e) {
+          // Ignore audio context autoplay restrictions before first gesture
+        }
+      }
+    };
+
+    function showToast(icon, text) {
+      const banner = document.getElementById('toast-banner');
+      document.getElementById('toast-icon').textContent = icon;
+      document.getElementById('toast-text').textContent = text;
+      banner.classList.remove('opacity-0', '-translate-y-2');
+      banner.classList.add('opacity-100', 'translate-y-0');
+      clearTimeout(window.__toastTimer);
+      window.__toastTimer = setTimeout(() => {
+        banner.classList.add('opacity-0', '-translate-y-2');
+        banner.classList.remove('opacity-100', 'translate-y-0');
+      }, 2800);
+    }
+
+    // =========================================================================
+    // 3. COSMIC TIMELINE & HYDROTHERMAL VENT RNA SOUP PUZZLE
+    // =========================================================================
+    const COSMIC_STAGES = [
+      {
+        id: 'big_bang',
+        title: '1. The Big Bang Singularity',
+        time: '13,800 MYA • 10¹² K',
+        desc: 'Rapid cosmic inflation expands quark-gluon plasma into vast clouds of primordial hydrogen and helium.',
+        color: 0xfef08a
+      },
+      {
+        id: 'supernovae',
+        title: '2. First Galaxies & Supernovae Forge',
+        time: '13,200 MYA • 5×10⁷ K',
+        desc: 'First-generation giant stars fuse carbon, oxygen, iron, and phosphorus before exploding in supernovae.',
+        color: 0xc084fc
+      },
+      {
+        id: 'yellow_star',
+        title: '3. G-Type Yellow Star Ignition',
+        time: '4,600 MYA • 5,778 K',
+        desc: 'Supernova shockwaves collapse a nebula into a stable yellow star surrounded by a rocky protoplanetary disk.',
+        color: 0xfacc15
+      },
+      {
+        id: 'molten_earth',
+        title: '4. Molten Hadean Earth Cools into Oceans',
+        time: '4,400 MYA • 450 K',
+        desc: 'Bombardment subsides; the basaltic crust cools enough for torrential rains to form global primordial oceans.',
+        color: 0xf97316
+      },
+      {
+        id: 'luca_vent',
+        title: '5. Hydrothermal Vent RNA Soup → LUCA',
+        time: '4,000 MYA • 345 K',
+        desc: 'Alkaline hydrothermal vents concentrate organic nucleotides. Complete the RNA ribozyme below to awaken LUCA!',
+        color: 0x2dd4bf
+      }
+    ];
+
+    const RNA_COMPLEMENT = { A: 'U', U: 'A', G: 'C', C: 'G' };
+    let currentCosmicStep = 0;
+    let rnaTemplate = ['A', 'U', 'G', 'C', 'G', 'A'];
+    let rnaAssembled = [];
+    let lucaEmerged = false;
+
+    function renderRNAPuzzleUI() {
+      const tBox = document.getElementById('rna-template-slots');
+      const aBox = document.getElementById('rna-assembled-slots');
+      tBox.innerHTML = '';
+      aBox.innerHTML = '';
+
+      rnaTemplate.forEach((base, idx) => {
+        const tEl = document.createElement('div');
+        tEl.className = 'w-9 h-9 rounded-lg bg-slate-800 border border-slate-600 flex items-center justify-center font-bold mono text-sm text-cyan-300';
+        tEl.textContent = base;
+        tBox.appendChild(tEl);
+
+        const aEl = document.createElement('div');
+        const paired = rnaAssembled[idx];
+        const isCurrent = idx === rnaAssembled.length;
+        aEl.className = paired
+          ? 'w-9 h-9 rounded-lg bg-teal-500/30 border border-teal-400 flex items-center justify-center font-bold mono text-sm text-teal-200'
+          : (isCurrent
+              ? 'w-9 h-9 rounded-lg bg-amber-500/20 border-2 border-amber-400 flex items-center justify-center font-bold mono text-xs text-amber-300 animate-pulse-ring'
+              : 'w-9 h-9 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center font-bold mono text-xs text-slate-600');
+        aEl.textContent = paired || (isCurrent ? '?' : '·');
+        aBox.appendChild(aEl);
+      });
+
+      document.getElementById('rna-progress-badge').textContent = `${rnaAssembled.length} / ${rnaTemplate.length} Paired`;
+    }
+
+    function pairRNABase(candidate) {
+      if (lucaEmerged) {
+        showToast('🧬', 'LUCA has already emerged! Explore the World Map or reset strand.');
+        return;
+      }
+      const idx = rnaAssembled.length;
+      const targetBase = rnaTemplate[idx];
+      const expected = RNA_COMPLEMENT[targetBase];
+
+      if (candidate === expected) {
+        rnaAssembled.push(candidate);
+        gameState.dnaPoints += 10;
+        SoundFX.playTone(520 + idx * 70, 0.14, 'triangle', 760 + idx * 70);
+        AuditLog.log('INFO', 'luca_engine.cosmos', `RNA base paired: ${candidate} with ${targetBase} (${rnaAssembled.length}/${rnaTemplate.length})`);
+
+        if (rnaAssembled.length === rnaTemplate.length) {
+          lucaEmerged = true;
+          gameState.dnaPoints += 50;
+          SoundFX.playTone(440, 0.35, 'sine', 880);
+          document.getElementById('rna-status-msg').textContent = '🌟 LUCA EMERGED! +50 Bonus DNA awarded! Launching World Map...';
+          AuditLog.log('INFO', 'luca_engine.cosmos', 'LUCA EMERGED from hydrothermal vent! Awarded +50 DNA.');
+          showToast('🌟', 'LUCA Emerged from RNA Soup! +50 DNA Points!');
+        } else {
+          const nextTarget = rnaTemplate[rnaAssembled.length];
+          document.getElementById('rna-status-msg').textContent = `Bonded ${candidate}↔${targetBase}! Next template base is '${nextTarget}' (needs '${RNA_COMPLEMENT[nextTarget]}').`;
+        }
+      } else {
+        SoundFX.playTone(190, 0.2, 'sawtooth', 120);
+        document.getElementById('rna-status-msg').textContent = `Thermal mismatch! '${candidate}' cannot bond with '${targetBase}'. Try '${expected}'!`;
+        AuditLog.log('WARN', 'luca_engine.cosmos', `RNA mismatch: tried ${candidate} for template ${targetBase} (expected ${expected})`);
+      }
+
+      renderRNAPuzzleUI();
+      updateTopHUD();
+    }
+
+    function resetRNAPuzzle() {
+      const pool = ['A', 'U', 'G', 'C'];
+      rnaTemplate = Array.from({ length: 6 }, () => pool[Math.floor(Math.random() * 4)]);
+      rnaAssembled = [];
+      lucaEmerged = false;
+      document.getElementById('rna-status-msg').textContent = `New hydrothermal RNA strand generated! Pair base 1 ('${rnaTemplate[0]}').`;
+      renderRNAPuzzleUI();
+    }
+
+    function setCosmicStep(stepIdx) {
+      currentCosmicStep = Math.max(0, Math.min(COSMIC_STAGES.length - 1, stepIdx));
+      const st = COSMIC_STAGES[currentCosmicStep];
+      document.getElementById('cosmos-title').textContent = st.title;
+      document.getElementById('cosmos-time-readout').textContent = st.time;
+      document.getElementById('cosmos-desc').textContent = st.desc;
+
+      for (let i = 0; i < 5; i++) {
+        const btn = document.getElementById(`cosmic-step-btn-${i}`);
+        if (i === currentCosmicStep) {
+          btn.className = 'py-1.5 px-2 rounded-lg text-[11px] font-bold bg-cyan-500 text-slate-950 shadow';
+        } else {
+          btn.className = 'py-1.5 px-2 rounded-lg text-[11px] font-semibold bg-slate-800/90 text-slate-300 hover:bg-slate-700';
+        }
+      }
+      SoundFX.playTone(300 + currentCosmicStep * 90, 0.18, 'sine');
+      AuditLog.log('INFO', 'luca_engine.cosmos', `Cosmic epoch set to ${st.id} (${st.time})`);
+    }
+
+    function advanceCosmicStep() {
+      if (currentCosmicStep < COSMIC_STAGES.length - 1) {
+        setCosmicStep(currentCosmicStep + 1);
+      } else {
+        switchScreen('world');
+      }
+    }
+
+    // =========================================================================
+    // 4. CREATURE GENETICS, MORPHOLOGY & WORLD SIMULATION STATE
+    // =========================================================================
+    const FEATURE_CATALOG = {
+      flagella: {
+        id: 'flagella',
+        name: 'Rotary Flagella',
+        cost: 15,
+        category: 'Locomotion',
+        stats: { swimSpeed: 2.5, agility: 1.0 },
+        desc: 'Microscopic whip propeller for high-viscosity hydrothermal vents.'
+      },
+      viral_capsid: {
+        id: 'viral_capsid',
+        name: 'Icosahedral Viral Capsid',
+        cost: 30,
+        category: 'Viral Path',
+        stats: { infectionPower: 4.5, stealth: 2.0 },
+        desc: 'Unlocks the Viral Takeover path: hijack host organisms to replicate rapidly.'
+      },
+      hydro_fins: {
+        id: 'hydro_fins',
+        name: 'Hydrodynamic Dorsal & Pectoral Fins',
+        cost: 25,
+        category: 'Locomotion',
+        stats: { swimSpeed: 4.5, agility: 2.0 },
+        desc: 'Fins channel water currents for high-speed aquatic propulsion.'
+      },
+      thermal_fur: {
+        id: 'thermal_fur',
+        name: 'Insulating Mammalian Fur Coat',
+        cost: 30,
+        category: 'Integument',
+        stats: { coldResistance: 5.0, defense: 1.5 },
+        desc: 'Dense hair traps body heat, preventing hypothermia in glacial ice ages.'
+      },
+      chitin_carapace: {
+        id: 'chitin_carapace',
+        name: 'Armored Chitin Exoskeleton',
+        cost: 35,
+        category: 'Defense',
+        stats: { defense: 5.0, attackPower: 1.5 },
+        desc: 'Interlocking plates that deflect predator jaws and crushing pressure.'
+      },
+      articulated_limbs: {
+        id: 'articulated_limbs',
+        name: 'Tetrapod Articulated Limbs',
+        cost: 40,
+        category: 'Locomotion & Tools',
+        stats: { landSpeed: 4.5, dexterity: 3.0 },
+        desc: 'Load-bearing legs and grasping digits for land movement and button presses.'
+      },
+      compound_eyes: {
+        id: 'compound_eyes',
+        name: 'Multispectral Compound Eyes',
+        cost: 25,
+        category: 'Sensory',
+        stats: { sensoryRange: 4.5, agility: 1.5 },
+        desc: 'Detects distant predators, nutrients, and mutagenic DNA signatures.'
+      },
+      neocortex_synapse: {
+        id: 'neocortex_synapse',
+        name: 'Expanded Prefrontal Neocortex',
+        cost: 50,
+        category: 'Cognitive & Social',
+        stats: { cognition: 5.0, socialSkill: 4.0, dexterity: 2.0 },
+        desc: 'Enables complex social packs and operation of ancient button mechanisms.'
+      },
+      apex_muscle_fibers: {
+        id: 'apex_muscle_fibers',
+        name: 'Fast-Twitch Myofibril Muscles',
+        cost: 40,
+        category: 'Musculature',
+        stats: { attackPower: 4.5, landSpeed: 2.0 },
+        desc: 'High-density muscle bundles amplify strike force and sprint speed.'
+      },
+      avian_wings: {
+        id: 'avian_wings',
+        name: 'Pneumatic Leviathan Wings',
+        cost: 55,
+        category: 'Aerial & Cosmic',
+        stats: { flightSpeed: 6.0, agility: 3.5, coldResistance: 2.0 },
+        desc: 'Soar across continental skies and stratospheric archipelagos.'
+      }
+    };
+
+    const BIOMES = {
+      hydrothermal_micro: {
+        id: 'hydrothermal_micro',
+        name: 'Alkaline Hydrothermal Vent (Micro)',
+        scale: 'Microscale (10 µm - 1 mm)',
+        viscosity: 0.85,
+        gravity: 0.05,
+        tempC: 68,
+        medium: 'micro_fluid',
+        bgHex: 0x041f2a,
+        fogHex: 0x062c3a,
+        groundHex: 0x0f3f4c
+      },
+      pelagic_ocean: {
+        id: 'pelagic_ocean',
+        name: 'Cambrian Pelagic Ocean',
+        scale: 'Macro-Aquatic (10 cm - 15 m)',
+        viscosity: 0.45,
+        gravity: 0.15,
+        tempC: 18,
+        medium: 'water',
+        bgHex: 0x031838,
+        fogHex: 0x062859,
+        groundHex: 0x0a3977
+      },
+      pangaea_jungle: {
+        id: 'pangaea_jungle',
+        name: 'Carboniferous Pangaea Jungle',
+        scale: 'Macro-Terrestrial (1 m - 30 m)',
+        viscosity: 0.05,
+        gravity: 1.0,
+        tempC: 28,
+        medium: 'land',
+        bgHex: 0x092214,
+        fogHex: 0x0f3822,
+        groundHex: 0x164e2e
+      },
+      pleistocene_tundra: {
+        id: 'pleistocene_tundra',
+        name: 'Glacial Ice Age Tundra',
+        scale: 'Macro-Cryogenic (1 m - 25 m)',
+        viscosity: 0.08,
+        gravity: 1.0,
+        tempC: -22,
+        medium: 'land',
+        bgHex: 0x0f2537,
+        fogHex: 0x1e3a52,
+        groundHex: 0x38bdf8
+      },
+      sky_archipelago: {
+        id: 'sky_archipelago',
+        name: 'Stratospheric Sky Archipelago',
+        scale: 'Planetary Canopy (10 m - 500 m)',
+        viscosity: 0.02,
+        gravity: 0.65,
+        tempC: -5,
+        medium: 'air',
+        bgHex: 0x170f2e,
+        fogHex: 0x26174a,
+        groundHex: 0x4c1d95
+      }
+    };
+
+    const gameState = {
+      activeScreen: 'world',
+      dnaPoints: 75,
+      health: 100,
+      maxHealth: 100,
+      generation: 1,
+      epochMya: 3800,
+      diet: 'Omnivore',
+      currentBiome: 'hydrothermal_micro',
+      sculptRegion: 'torso',
+      unlockedFeatures: new Set(['flagella', 'hydro_fins', 'thermal_fur', 'viral_capsid', 'articulated_limbs']),
+      activeFeatures: new Set(['flagella', 'hydro_fins']),
+      morph: {
+        torsoLength: 1.0,
+        torsoRadius: 1.0,
+        headScale: 1.0,
+        extremityStretch: 1.0,
+        skinPattern: 'bioluminescent'
+      },
+      settings: {
+        climateSeverity: 1.0,
+        predationAggression: 1.0,
+        resourceScarcity: 1.0,
+        coopEnabled: true,
+        graphicsQuality: 'epic'
+      },
+      npcSpecies: [
+        { id: 'npc_anomalocaris', name: 'Radiodont Apex Hunter', level: 1, atk: 4.0, def: 2.5, spd: 3.2, dnaTrait: 'compound_eyes', color: 0xf43f5e },
+        { id: 'npc_trilobite', name: 'Armored Trilobite Grazer', level: 1, atk: 2.0, def: 4.0, spd: 2.0, dnaTrait: 'chitin_carapace', color: 0xf59e0b },
+        { id: 'npc_phage', name: 'Bacteriophage Viral Swarm', level: 1, atk: 3.5, def: 1.5, spd: 4.2, dnaTrait: 'viral_capsid', color: 0xa855f7 },
+        { id: 'npc_synapsid', name: 'Crowned Synapsid Strider', level: 2, atk: 4.2, def: 3.5, spd: 3.6, dnaTrait: 'neocortex_synapse', color: 0xec4899 },
+        { id: 'npc_skywyrm', name: 'Stratospheric Sky-Wyrm', level: 2, atk: 4.8, def: 3.8, spd: 4.8, dnaTrait: 'avian_wings', color: 0x38bdf8 }
+      ]
+    };
+
+    // =========================================================================
+    // 5. CREATURE STATS & BIOME PHYSICS COMPUTATION
+    // =========================================================================
+    function computeCreatureStats() {
+      const s = {
+        swimSpeed: 2.0,
+        landSpeed: 1.2,
+        flightSpeed: 0.0,
+        coldResistance: 1.0,
+        heatResistance: 2.0,
+        attackPower: 2.5,
+        defense: 1.5,
+        sensoryRange: 3.0,
+        cognition: 1.2,
+        socialSkill: 1.0,
+        dexterity: 1.0,
+        infectionPower: 0.0,
+        agility: 1.5,
+        sizeFactor: 1.0
+      };
+
+      gameState.activeFeatures.forEach(fid => {
+        const feat = FEATURE_CATALOG[fid];
+        if (feat && feat.stats) {
+          Object.entries(feat.stats).forEach(([k, v]) => {
+            s[k] = (s[k] || 0) + v;
+          });
+        }
+      });
+
+      const m = gameState.morph;
+      const volume = m.torsoLength * (m.torsoRadius * m.torsoRadius);
+      s.sizeFactor = +(volume).toFixed(2);
+      s.coldResistance += (m.torsoRadius - 1.0) * 1.6;
+      s.landSpeed += (m.extremityStretch - 1.0) * 1.4;
+      s.swimSpeed += (m.torsoLength - 1.0) * 1.1;
+      s.cognition += (m.headScale - 1.0) * 2.2;
+      s.dexterity += (m.extremityStretch - 1.0) * 0.8;
+
+      if (m.skinPattern === 'fur') s.coldResistance += 2.5;
+      if (m.skinPattern === 'chitin') s.defense += 2.5;
+      if (m.skinPattern === 'scales') { s.swimSpeed += 1.5; s.heatResistance += 1.5; }
+      if (m.skinPattern === 'bioluminescent') s.sensoryRange += 2.0;
+      if (m.skinPattern === 'viral') s.infectionPower += 2.5;
+
+      return s;
+    }
+
+    function computeBiomeLocomotion() {
+      const biome = BIOMES[gameState.currentBiome];
+      const st = computeCreatureStats();
+      let speed = 2.0;
+      if (biome.medium === 'water' || biome.medium === 'micro_fluid') {
+        speed = Math.max(0.9, st.swimSpeed - biome.viscosity * (st.sizeFactor * 0.3));
+      } else if (biome.medium === 'land') {
+        const limbMult = gameState.activeFeatures.has('articulated_limbs') ? 1.35 : 0.65;
+        speed = Math.max(0.7, ((st.landSpeed + st.flightSpeed * 0.35) * limbMult) / Math.max(0.3, biome.gravity));
+      } else {
+        speed = Math.max(0.8, (st.flightSpeed + st.landSpeed * 0.4) / Math.max(0.2, biome.gravity));
+      }
+
+      let thermalDrain = 0;
+      if (biome.tempC < 0) {
+        const gap = Math.abs(biome.tempC) / 6.0 - st.coldResistance;
+        if (gap > 0) thermalDrain = +(gap * gameState.settings.climateSeverity).toFixed(2);
+      } else if (biome.tempC > 45) {
+        const gap = (biome.tempC - 40) / 10.0 - st.heatResistance;
+        if (gap > 0) thermalDrain = +(gap * gameState.settings.climateSeverity).toFixed(2);
+      }
+
+      return { speed: +speed.toFixed(2), thermalDrain };
+    }
+
+    function getArchetypeLabel() {
+      if (gameState.activeFeatures.has('viral_capsid')) return 'Pandemic Viral Swarm';
+      if (gameState.activeFeatures.has('avian_wings') && gameState.activeFeatures.has('neocortex_synapse')) return 'Cosmic Apex Leviathan';
+      if (gameState.activeFeatures.has('avian_wings')) return 'Sky Sovereign';
+      if (gameState.activeFeatures.has('articulated_limbs')) return 'Terrestrial Tetrapod';
+      if (gameState.activeFeatures.has('hydro_fins')) return 'Pelagic Swimmer';
+      return 'LUCA Proto-Cell';
+    }
+
+    // =========================================================================
+    // 6. UI RENDERERS & INTERACTIVE HANDLERS
+    // =========================================================================
+    function updateTopHUD() {
+      const st = computeCreatureStats();
+      gameState.maxHealth = Math.round(100 + st.sizeFactor * 20 + st.defense * 6);
+      if (gameState.health > gameState.maxHealth) gameState.health = gameState.maxHealth;
+
+      document.getElementById('hud-dna').textContent = gameState.dnaPoints;
+      document.getElementById('creator-dna-readout').textContent = gameState.dnaPoints;
+      document.getElementById('hud-hp').textContent = `${Math.round(gameState.health)}/${gameState.maxHealth}`;
+      document.getElementById('hud-gen').textContent = gameState.generation;
+      document.getElementById('badge-archetype').textContent = getArchetypeLabel();
+      document.getElementById('badge-diet').textContent = gameState.diet;
+
+      const biome = BIOMES[gameState.currentBiome];
+      document.getElementById('header-epoch-label').textContent = `Epoch: ${gameState.epochMya.toLocaleString()} MYA • ${biome.name}`;
+      document.getElementById('biome-scale-pill').textContent = biome.scale;
+
+      const loco = computeBiomeLocomotion();
+      document.getElementById('phys-speed').textContent = `${loco.speed} m/s`;
+      document.getElementById('phys-drag').textContent = `${biome.viscosity} μ / ${biome.gravity}G`;
+      const stressEl = document.getElementById('phys-temp-stress');
+      if (loco.thermalDrain > 0) {
+        stressEl.textContent = `-${loco.thermalDrain} HP/s (${biome.tempC}°C)`;
+        stressEl.className = 'mono font-bold text-rose-400';
+      } else {
+        stressEl.textContent = `Adapted (${biome.tempC}°C)`;
+        stressEl.className = 'mono font-bold text-emerald-300';
+      }
+
+      // Cognitive mechanism button readiness
+      const canUseMech = st.cognition >= 3.2 && st.dexterity >= 2.2;
+      const mechStatus = document.getElementById('mech-lock-status');
+      if (canUseMech) {
+        mechStatus.textContent = `UNLOCKED (Cog ${st.cognition.toFixed(1)}, Dex ${st.dexterity.toFixed(1)})`;
+        mechStatus.className = 'block text-emerald-300 font-semibold';
+      } else {
+        mechStatus.textContent = `Needs Cog ≥ 3.2 & Dex ≥ 2.2 (Now: ${st.cognition.toFixed(1)} / ${st.dexterity.toFixed(1)})`;
+        mechStatus.className = 'block text-slate-400';
+      }
+    }
+
+    function renderNPCRoster() {
+      const list = document.getElementById('npc-roster-list');
+      list.innerHTML = '';
+      gameState.npcSpecies.forEach(npc => {
+        const unlocked = gameState.unlockedFeatures.has(npc.dnaTrait);
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between bg-slate-900/90 px-2.5 py-1.5 rounded-lg border border-slate-800';
+        row.innerHTML = `
+          <div>
+            <span class="font-bold text-slate-100">${npc.name}</span>
+            <span class="text-purple-300 mono ml-1">Lv.${npc.level}</span>
+            <div class="text-[10px] text-slate-400 mono">ATK ${npc.atk.toFixed(1)} • DEF ${npc.def.toFixed(1)} • Trait: ${FEATURE_CATALOG[npc.dnaTrait].name}</div>
+          </div>
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${unlocked ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}">
+            ${unlocked ? 'DNA Unlocked' : 'Bump to Assimilate'}
+          </span>
+        `;
+        list.appendChild(row);
+      });
+    }
+
+    function appendWorldFeed(msg) {
+      const feed = document.getElementById('world-event-feed');
+      const div = document.createElement('div');
+      div.textContent = `• ${msg}`;
+      feed.prepend(div);
+      while (feed.children.length > 25) {
+        feed.removeChild(feed.lastChild);
+      }
+    }
+
+    function renderCreatorUI() {
+      const st = computeCreatureStats();
+      const statsGrid = document.getElementById('creator-stats-grid');
+      const statEntries = [
+        ['🏊 Swim Speed', st.swimSpeed.toFixed(1)],
+        ['🏃 Land Speed', st.landSpeed.toFixed(1)],
+        ['🦅 Flight Speed', st.flightSpeed.toFixed(1)],
+        ['❄️ Cold Resist', st.coldResistance.toFixed(1)],
+        ['⚔️ Attack / Bite', st.attackPower.toFixed(1)],
+        ['🛡️ Armor Defense', st.defense.toFixed(1)],
+        ['🧠 Cognition', st.cognition.toFixed(1)],
+        ['🤲 Limb Dexterity', st.dexterity.toFixed(1)],
+        ['📡 Sensory Range', st.sensoryRange.toFixed(1)],
+        ['🦠 Viral Infect', st.infectionPower.toFixed(1)]
+      ];
+      statsGrid.innerHTML = statEntries.map(([label, val]) => `
+        <div class="flex justify-between bg-slate-900/90 px-2 py-1 rounded border border-slate-800">
+          <span class="text-slate-300">${label}</span>
+          <span class="mono font-bold text-teal-300">${val}</span>
+        </div>
+      `).join('');
+
+      const catList = document.getElementById('feature-catalog-list');
+      catList.innerHTML = '';
+      Object.values(FEATURE_CATALOG).forEach(feat => {
+        const isActive = gameState.activeFeatures.has(feat.id);
+        const isUnlocked = gameState.unlockedFeatures.has(feat.id);
+        const card = document.createElement('div');
+        card.className = `p-2.5 rounded-xl border transition-all ${
+          isActive
+            ? 'bg-teal-950/60 border-teal-400/60'
+            : (isUnlocked ? 'bg-slate-900/90 border-slate-700' : 'bg-slate-950/60 border-slate-800 opacity-75')
+        }`;
+        card.innerHTML = `
+          <div class="flex items-center justify-between gap-2 mb-1">
+            <div>
+              <span class="text-xs font-bold text-white">${feat.name}</span>
+              <span class="text-[10px] ml-1 px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300">${feat.category}</span>
+            </div>
+            <span class="mono text-xs font-bold ${isActive ? 'text-teal-300' : 'text-amber-300'}">
+              ${isActive ? 'ACTIVE' : `${feat.cost} DNA`}
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-300 mb-2">${feat.desc}</p>
+          <div class="flex items-center justify-between">
+            <span class="text-[10px] mono text-teal-300">
+              ${Object.entries(feat.stats).map(([k, v]) => `+${v} ${k}`).join(' • ')}
+            </span>
+            ${
+              isActive
+                ? `<button onclick="toggleTrait('${feat.id}')" class="px-2.5 py-1 rounded-lg bg-rose-500/30 hover:bg-rose-500/50 border border-rose-400/50 text-rose-200 text-[11px] font-bold">Devolve (+${Math.floor(feat.cost / 2)} DNA)</button>`
+                : (isUnlocked
+                    ? `<button onclick="toggleTrait('${feat.id}')" class="px-2.5 py-1 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 text-[11px] font-extrabold">Evolve (${feat.cost} DNA)</button>`
+                    : `<button onclick="unlockTraitWithDiscovery('${feat.id}')" class="px-2.5 py-1 rounded-lg bg-amber-500/25 hover:bg-amber-500/40 border border-amber-400/40 text-amber-200 text-[11px] font-semibold">🔒 Sequence (+15 DNA)</button>`)
+            }
+          </div>
+        `;
+        catList.appendChild(card);
+      });
+    }
+
+    function toggleTrait(featureId) {
+      const feat = FEATURE_CATALOG[featureId];
+      if (!feat) return;
+      if (gameState.activeFeatures.has(featureId)) {
+        if (gameState.activeFeatures.size <= 1) {
+          showToast('⚠️', 'Creature must retain at least 1 biological trait!');
+          return;
+        }
+        const refund = Math.floor(feat.cost / 2);
+        gameState.activeFeatures.delete(featureId);
+        gameState.dnaPoints += refund;
+        SoundFX.playTone(320, 0.15, 'sine', 220);
+        AuditLog.log('INFO', 'luca_engine.creature', `Devolved ${feat.name} (+${refund} DNA refunded)`);
+        showToast('♻️', `Devolved ${feat.name} (+${refund} DNA)`);
+      } else {
+        if (gameState.dnaPoints < feat.cost) {
+          SoundFX.playTone(160, 0.2, 'sawtooth');
+          showToast('⚠️', `Need ${feat.cost} DNA to evolve ${feat.name} (Have ${gameState.dnaPoints}).`);
+          return;
+        }
+        gameState.dnaPoints -= feat.cost;
+        gameState.activeFeatures.add(featureId);
+        SoundFX.playTone(480, 0.2, 'triangle', 760);
+        AuditLog.log('INFO', 'luca_engine.creature', `Evolved ${feat.name} (Remaining DNA=${gameState.dnaPoints})`);
+        showToast('🧬', `Evolved ${feat.name}!`);
+      }
+      rebuildPlayerCreatureMesh();
+      renderCreatorUI();
+      updateTopHUD();
+    }
+
+    function unlockTraitWithDiscovery(featureId) {
+      const feat = FEATURE_CATALOG[featureId];
+      if (!feat) return;
+      if (gameState.dnaPoints < 15) {
+        showToast('⚠️', 'Need 15 DNA points to sequence locked genome!');
+        return;
+      }
+      gameState.dnaPoints -= 15;
+      gameState.unlockedFeatures.add(featureId);
+      SoundFX.playTone(580, 0.18, 'sine', 820);
+      AuditLog.log('INFO', 'luca_engine.creature', `Sequenced locked trait ${feat.name} into DNA pool`);
+      showToast('🔓', `Unlocked ${feat.name} in Creature Creator!`);
+      renderCreatorUI();
+      renderNPCRoster();
+      updateTopHUD();
+    }
+
+    function setSculptRegion(region) {
+      gameState.sculptRegion = region;
+      ['torso', 'head', 'extremities'].forEach(r => {
+        const btn = document.getElementById(`sculpt-btn-${r}`);
+        btn.className = (r === region)
+          ? 'py-1.5 rounded-xl text-xs font-bold bg-teal-500 text-slate-950 shadow'
+          : 'py-1.5 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300';
+      });
+    }
+
+    function updateMorphFromUI() {
+      gameState.morph.torsoLength = parseFloat(document.getElementById('slider-torso-len').value);
+      gameState.morph.torsoRadius = parseFloat(document.getElementById('slider-torso-rad').value);
+      gameState.morph.headScale = parseFloat(document.getElementById('slider-head-scale').value);
+      gameState.morph.extremityStretch = parseFloat(document.getElementById('slider-ext-stretch').value);
+
+      document.getElementById('val-torso-len').textContent = `${gameState.morph.torsoLength.toFixed(2)}x`;
+      document.getElementById('val-torso-rad').textContent = `${gameState.morph.torsoRadius.toFixed(2)}x`;
+      document.getElementById('val-head-scale').textContent = `${gameState.morph.headScale.toFixed(2)}x`;
+      document.getElementById('val-ext-stretch').textContent = `${gameState.morph.extremityStretch.toFixed(2)}x`;
+
+      rebuildPlayerCreatureMesh();
+      renderCreatorUI();
+      updateTopHUD();
+    }
+
+    function syncMorphSlidersFromState() {
+      document.getElementById('slider-torso-len').value = gameState.morph.torsoLength;
+      document.getElementById('slider-torso-rad').value = gameState.morph.torsoRadius;
+      document.getElementById('slider-head-scale').value = gameState.morph.headScale;
+      document.getElementById('slider-ext-stretch').value = gameState.morph.extremityStretch;
+      updateMorphFromUI();
+    }
+
+    function setSkinPattern(pattern) {
+      gameState.morph.skinPattern = pattern;
+      ['bioluminescent', 'fur', 'scales', 'chitin', 'viral'].forEach(p => {
+        const btn = document.getElementById(`skin-btn-${p}`);
+        if (!btn) return;
+        const baseSpan = p === 'viral' ? 'col-span-2 ' : '';
+        btn.className = (p === pattern)
+          ? `${baseSpan}py-1.5 px-2 rounded-lg bg-cyan-500/30 border border-cyan-400 text-cyan-200 font-semibold text-left`
+          : `${baseSpan}py-1.5 px-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-semibold text-left`;
+      });
+      SoundFX.playTone(460, 0.1, 'sine');
+      rebuildPlayerCreatureMesh();
+      renderCreatorUI();
+      updateTopHUD();
+    }
+
+    function switchScreen(screenId) {
+      gameState.activeScreen = screenId;
+      ['cosmos', 'world', 'creator', 'settings'].forEach(id => {
+        const sec = document.getElementById(`screen-${id}`);
+        const tab = document.getElementById(`tab-${id}`);
+        if (id === screenId) {
+          sec.classList.remove('hidden');
+          tab.className = 'px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all bg-cyan-500 text-slate-950 shadow';
+        } else {
+          sec.classList.add('hidden');
+          tab.className = 'px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all text-slate-300 hover:text-white';
+        }
+      });
+      SoundFX.playTone(390, 0.08, 'sine');
+      if (screenId === 'creator') {
+        renderCreatorUI();
+      }
+      updateTopHUD();
+    }
+
+    function changeBiome(biomeId) {
+      if (!BIOMES[biomeId]) return;
+      gameState.currentBiome = biomeId;
+      const b = BIOMES[biomeId];
+      applyBiomeEnvironmentTo3D(b);
+      SoundFX.playTone(310, 0.2, 'triangle', 490);
+      AuditLog.log('INFO', 'luca_engine.world', `Switched biome to ${b.name} (${b.scale}, Temp=${b.tempC}C)`);
+      appendWorldFeed(`Migrated to ${b.name} (${b.scale}). Physics updated!`);
+      showToast('🌍', `Entered ${b.name}`);
+      updateTopHUD();
+    }
+
+    function triggerEpochCoEvolution() {
+      gameState.epochMya = Math.max(0, gameState.epochMya - 250);
+      gameState.npcSpecies.forEach(npc => {
+        npc.level += 1;
+        npc.atk = +(npc.atk + 1.1 * gameState.settings.predationAggression).toFixed(1);
+        npc.def = +(npc.def + 0.9 * gameState.settings.climateSeverity).toFixed(1);
+        npc.spd = +(npc.spd + 0.35 * gameState.settings.resourceScarcity).toFixed(1);
+      });
+      SoundFX.playTone(280, 0.28, 'sawtooth', 560);
+      AuditLog.log('INFO', 'luca_engine.world', `Co-evolution epoch advanced to ${gameState.epochMya} MYA; all NPCs leveled up.`);
+      appendWorldFeed(`Geological Epoch advanced! NPC species co-evolved to Lv.${gameState.npcSpecies[0].level}.`);
+      showToast('⏳', `New Geological Age (${gameState.epochMya} MYA): NPCs Co-Evolved!`);
+      renderNPCRoster();
+      updateTopHUD();
+    }
+
+    function activateWorldMechanism() {
+      const st = computeCreatureStats();
+      if (st.cognition < 3.2 || st.dexterity < 2.2) {
+        SoundFX.playTone(170, 0.2, 'sawtooth');
+        showToast('🔒', 'Evolve Articulated Limbs + Neocortex (or stretch Head/Extremities) to use mechanisms!');
+        appendWorldFeed('Attempted Monolith button press — insufficient Cognition/Limb Dexterity.');
+        return;
+      }
+      gameState.dnaPoints += 45;
+      // Also unlock a high-tier trait if locked
+      ['neocortex_synapse', 'avian_wings', 'apex_muscle_fibers'].forEach(t => gameState.unlockedFeatures.add(t));
+      SoundFX.playTone(520, 0.3, 'sine', 960);
+      AuditLog.log('INFO', 'luca_engine.world', 'Activated Ancient Monolith Selection Mechanism via limbs & cognition (+45 DNA)');
+      appendWorldFeed('Activated Ancient Monolith Mechanism! +45 DNA & High-Tier Traits Unlocked!');
+      showToast('🔘', 'Ancient Mechanism Activated! +45 DNA Points!');
+      if (monolithMesh) {
+        monolithMesh.rotation.y += Math.PI * 0.5;
+        monolithMesh.scale.set(1.25, 1.25, 1.25);
+        setTimeout(() => monolithMesh && monolithMesh.scale.set(1, 1, 1), 400);
+      }
+      renderNPCRoster();
+      updateTopHUD();
+    }
+
+    function breedNextGeneration() {
+      gameState.generation += 1;
+      const st = computeCreatureStats();
+      gameState.maxHealth = Math.round(100 + st.sizeFactor * 20 + st.defense * 6);
+      gameState.health = gameState.maxHealth;
+      gameState.dnaPoints += 20;
+      SoundFX.playTone(440, 0.25, 'triangle', 660);
+      AuditLog.log('INFO', 'luca_engine.creature', `Spawned Generation ${gameState.generation} offspring with inherited genome.`);
+      appendWorldFeed(`Generation ${gameState.generation} hatched! Traits passed to offspring (+20 DNA).`);
+      showToast('🥚', `Generation ${gameState.generation} Offspring Born! Full HP & +20 DNA!`);
+      updateTopHUD();
+    }
+
+    function updateSettingsFromUI() {
+      gameState.settings.climateSeverity = parseFloat(document.getElementById('slider-climate').value);
+      gameState.settings.predationAggression = parseFloat(document.getElementById('slider-predation').value);
+      gameState.settings.resourceScarcity = parseFloat(document.getElementById('slider-resource').value);
+
+      document.getElementById('val-climate-slider').textContent = `${gameState.settings.climateSeverity.toFixed(1)}x`;
+      document.getElementById('val-predation-slider').textContent = `${gameState.settings.predationAggression.toFixed(1)}x`;
+      document.getElementById('val-resource-slider').textContent = `${gameState.settings.resourceScarcity.toFixed(1)}x`;
+      updateTopHUD();
+    }
+
+    function toggleAudio() {
+      SoundFX.enabled = !SoundFX.enabled;
+      const btn = document.getElementById('btn-toggle-audio');
+      btn.textContent = SoundFX.enabled ? 'ON' : 'MUTED';
+      btn.className = SoundFX.enabled
+        ? 'px-3 py-1 rounded-lg bg-teal-500 text-slate-950 font-bold'
+        : 'px-3 py-1 rounded-lg bg-slate-700 text-slate-300 font-bold';
+    }
+
+    function updateGraphicsQuality(val) {
+      gameState.settings.graphicsQuality = val;
+      if (ambientParticles) {
+        ambientParticles.visible = (val === 'epic');
+      }
+      AuditLog.log('INFO', 'luca_engine.settings', `Graphics preset changed to ${val}`);
+    }
+
+    function toggleCoopMultiplayer() {
+      gameState.settings.coopEnabled = !gameState.settings.coopEnabled;
+      const btn = document.getElementById('btn-toggle-coop');
+      const ind = document.getElementById('multiplayer-peer-indicator');
+      btn.textContent = gameState.settings.coopEnabled ? 'ACTIVE' : 'OFFLINE';
+      btn.className = gameState.settings.coopEnabled
+        ? 'px-3 py-1 rounded-lg bg-emerald-500 text-slate-950 font-bold'
+        : 'px-3 py-1 rounded-lg bg-slate-700 text-slate-300 font-bold';
+      ind.textContent = gameState.settings.coopEnabled ? '● Co-Op Peer Active' : '○ Solo Mode';
+      if (coopAllyMesh) coopAllyMesh.visible = gameState.settings.coopEnabled;
+    }
+
+    function exportCreatureGenomeCode() {
+      const payload = {
+        gen: gameState.generation,
+        traits: Array.from(gameState.activeFeatures),
+        morph: gameState.morph
+      };
+      const encoded = btoa(JSON.stringify(payload));
+      try {
+        const temp = document.createElement('textarea');
+        temp.value = encoded;
+        document.body.appendChild(temp);
+        temp.select();
+        document.execCommand('copy');
+        document.body.removeChild(temp);
+      } catch (e) {}
+      document.getElementById('genome-share-status').textContent = `Copied (${encoded.slice(0, 14)}...)`;
+      showToast('📋', 'Genome code copied for Co-Op sharing!');
+    }
+
+    // =========================================================================
+    // 7. THREE.JS 3D ENGINE (WORLD MAP, PROCEDURAL CREATURE, PINCH/STRETCH)
+    // =========================================================================
+    let scene, camera, renderer, clock;
+    let playerGroup, monolithMesh, coopAllyMesh, ambientParticles, groundGrid;
+    const foodMeshes = [];
+    const npcMeshes = [];
+    const moveInput = { x: 0, z: 0 };
+    let targetWaypoint = null;
+
+    function initThreeJS() {
+      const container = document.getElementById('webgl-container');
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x041f2a);
+      scene.fog = new THREE.FogExp2(0x062c3a, 0.018);
+
+      camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 300);
+      camera.position.set(0, 16, 22);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      container.innerHTML = '';
+      container.appendChild(renderer.domElement);
+
+      clock = new THREE.Clock();
+
+      // Lighting
+      const ambientLight = new THREE.AmbientLight(0x94a3b8, 0.85);
+      scene.add(ambientLight);
+
+      const dirLight = new THREE.DirectionalLight(0x38bdf8, 1.35);
+      dirLight.position.set(18, 35, 20);
+      scene.add(dirLight);
+
+      const pointLight = new THREE.PointLight(0x2dd4bf, 1.6, 50);
+      pointLight.position.set(0, 6, 0);
+      scene.add(pointLight);
+
+      // Terrain & Hydrothermal / Biome Floor
+      const floorGeo = new THREE.PlaneGeometry(140, 140, 32, 32);
+      const posAttr = floorGeo.attributes.position;
+      for (let i = 0; i < posAttr.count; i++) {
+        const vx = posAttr.getX(i);
+        const vy = posAttr.getY(i);
+        const wave = Math.sin(vx * 0.12) * Math.cos(vy * 0.12) * 0.9;
+        posAttr.setZ(i, wave);
+      }
+      floorGeo.computeVertexNormals();
+      const floorMat = new THREE.MeshStandardMaterial({
+        color: 0x0f3f4c,
+        roughness: 0.75,
+        metalness: 0.15,
+        wireframe: false
+      });
+      const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+      floorMesh.rotation.x = -Math.PI / 2;
+      floorMesh.position.y = -1.5;
+      scene.add(floorMesh);
+      window.__floorMesh = floorMesh;
+
+      groundGrid = new THREE.GridHelper(120, 40, 0x2dd4bf, 0x1e293b);
+      groundGrid.position.y = -1.4;
+      scene.add(groundGrid);
+
+      // Ambient Cosmic/Hydrothermal Particles
+      const partGeo = new THREE.BufferGeometry();
+      const partCount = 350;
+      const partPos = new Float32Array(partCount * 3);
+      for (let i = 0; i < partCount * 3; i += 3) {
+        partPos[i] = (Math.random() - 0.5) * 90;
+        partPos[i + 1] = Math.random() * 25 - 1;
+        partPos[i + 2] = (Math.random() - 0.5) * 90;
+      }
+      partGeo.setAttribute('position', new THREE.BufferAttribute(partPos, 3));
+      const partMat = new THREE.PointsMaterial({ color: 0x5eead4, size: 0.35, transparent: true, opacity: 0.75 });
+      ambientParticles = new THREE.Points(partGeo, partMat);
+      scene.add(ambientParticles);
+
+      // Ancient Cognitive Button Mechanism (Monolith)
+      const monoGroup = new THREE.Group();
+      const pillar = new THREE.Mesh(
+        new THREE.BoxGeometry(2.2, 5.0, 1.2),
+        new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0x78350f, metalness: 0.6, roughness: 0.2 })
+      );
+      pillar.position.y = 1.5;
+      monoGroup.add(pillar);
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(1.6, 0.15, 12, 32),
+        new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7 })
+      );
+      ring.position.y = 4.6;
+      monoGroup.add(ring);
+      monoGroup.position.set(12, 0, -10);
+      scene.add(monoGroup);
+      monolithMesh = monoGroup;
+
+      // Build Player Creature, Co-Op Ally, Food Nodes, and NPC Creatures
+      playerGroup = new THREE.Group();
+      scene.add(playerGroup);
+      rebuildPlayerCreatureMesh();
+
+      // Co-op Symbiosis Peer Creature
+      coopAllyMesh = new THREE.Group();
+      const allyCore = new THREE.Mesh(
+        new THREE.SphereGeometry(0.95, 20, 20),
+        new THREE.MeshStandardMaterial({ color: 0x34d399, emissive: 0x065f46, roughness: 0.3 })
+      );
+      coopAllyMesh.add(allyCore);
+      coopAllyMesh.position.set(-5, 0.5, 4);
+      scene.add(coopAllyMesh);
+
+      spawnWorldEntities();
+      setupInputListeners(renderer.domElement);
+
+      window.addEventListener('resize', onWindowResize);
+      animateLoop();
+    }
+
+    function rebuildPlayerCreatureMesh() {
+      if (!playerGroup) return;
+      while (playerGroup.children.length > 0) {
+        playerGroup.remove(playerGroup.children[0]);
+      }
+
+      const m = gameState.morph;
+      const skinColorMap = {
+        bioluminescent: { color: 0x2dd4bf, emissive: 0x0d9488, rough: 0.25 },
+        fur: { color: 0xd97706, emissive: 0x451a03, rough: 0.85 },
+        scales: { color: 0x10b981, emissive: 0x064e3b, rough: 0.35 },
+        chitin: { color: 0x6366f1, emissive: 0x312e81, rough: 0.2 },
+        viral: { color: 0xc084fc, emissive: 0x581c87, rough: 0.15 }
+      };
+      const skin = skinColorMap[m.skinPattern] || skinColorMap.bioluminescent;
+
+      const bodyMat = new THREE.MeshStandardMaterial({
+        color: skin.color,
+        emissive: skin.emissive,
+        roughness: skin.rough,
+        metalness: 0.2
+      });
+
+      // Torso (scaled by torsoLength & torsoRadius from pinch/stretch)
+      const torsoGeo = gameState.activeFeatures.has('viral_capsid')
+        ? new THREE.IcosahedronGeometry(1.2, 1)
+        : new THREE.SphereGeometry(1.15, 28, 24);
+      const torsoMesh = new THREE.Mesh(torsoGeo, bodyMat);
+      torsoMesh.scale.set(m.torsoRadius, m.torsoRadius * 0.85, m.torsoLength * 1.35);
+      playerGroup.add(torsoMesh);
+
+      // Head / Cranium
+      const headGeo = new THREE.SphereGeometry(0.75 * m.headScale, 24, 24);
+      const headMesh = new THREE.Mesh(headGeo, bodyMat);
+      headMesh.position.set(0, 0.35 * m.torsoRadius, 1.25 * m.torsoLength);
+      playerGroup.add(headMesh);
+
+      // Eyes (Compound or simple)
+      const eyeMat = new THREE.MeshStandardMaterial({
+        color: gameState.activeFeatures.has('compound_eyes') ? 0xfacc15 : 0xffffff,
+        emissive: gameState.activeFeatures.has('compound_eyes') ? 0xca8a04 : 0x38bdf8
+      });
+      [-0.32, 0.32].forEach(xOff => {
+        const eye = new THREE.Mesh(new THREE.SphereGeometry(0.18 * m.headScale, 12, 12), eyeMat);
+        eye.position.set(xOff * m.headScale, 0.5 * m.torsoRadius, 1.25 * m.torsoLength + 0.55 * m.headScale);
+        playerGroup.add(eye);
+      });
+
+      // Brain Neocortex Halo if evolved
+      if (gameState.activeFeatures.has('neocortex_synapse')) {
+        const halo = new THREE.Mesh(
+          new THREE.TorusGeometry(0.65 * m.headScale, 0.07, 10, 24),
+          new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7 })
+        );
+        halo.rotation.x = Math.PI / 2;
+        halo.position.set(0, 0.95 * m.headScale, 1.25 * m.torsoLength);
+        playerGroup.add(halo);
+      }
+
+      // Hydrodynamic Fins
+      if (gameState.activeFeatures.has('hydro_fins')) {
+        const finMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0369a1, side: THREE.DoubleSide });
+        const dorsal = new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.4 * m.extremityStretch, 4), finMat);
+        dorsal.position.set(0, 1.1 * m.torsoRadius, -0.1);
+        playerGroup.add(dorsal);
+
+        [-1, 1].forEach(side => {
+          const pec = new THREE.Mesh(new THREE.BoxGeometry(1.2 * m.extremityStretch, 0.12, 0.6), finMat);
+          pec.position.set(side * (1.1 * m.torsoRadius + 0.4 * m.extremityStretch), -0.1, 0.2);
+          pec.rotation.z = side * -0.25;
+          playerGroup.add(pec);
+        });
+      }
+
+      // Articulated Limbs
+      if (gameState.activeFeatures.has('articulated_limbs')) {
+        const limbMat = new THREE.MeshStandardMaterial({ color: 0xf43f5e, emissive: 0x881337 });
+        [-1, 1].forEach(side => {
+          [-0.55, 0.55].forEach(zPos => {
+            const leg = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.16, 0.12, 1.35 * m.extremityStretch, 10),
+              limbMat
+            );
+            leg.position.set(side * 0.95 * m.torsoRadius, -0.75 * m.extremityStretch, zPos * m.torsoLength);
+            leg.rotation.z = side * 0.25;
+            playerGroup.add(leg);
+          });
+        });
+      }
+
+      // Avian / Leviathan Wings
+      if (gameState.activeFeatures.has('avian_wings')) {
+        const wingMat = new THREE.MeshStandardMaterial({ color: 0xfef08a, emissive: 0xa16207 });
+        [-1, 1].forEach(side => {
+          const wing = new THREE.Mesh(
+            new THREE.BoxGeometry(2.4 * m.extremityStretch, 0.1, 1.1),
+            wingMat
+          );
+          wing.position.set(side * (1.1 * m.torsoRadius + 1.0 * m.extremityStretch), 0.55 * m.torsoRadius, 0);
+          wing.rotation.z = side * 0.18;
+          playerGroup.add(wing);
+        });
+      }
+
+      // Rotary Flagella Tail
+      if (gameState.activeFeatures.has('flagella')) {
+        const tail = new THREE.Mesh(
+          new THREE.ConeGeometry(0.22, 1.8 * m.extremityStretch, 8),
+          new THREE.MeshStandardMaterial({ color: 0xa855f7, emissive: 0x581c87 })
+        );
+        tail.rotation.x = -Math.PI / 2;
+        tail.position.set(0, 0, -1.4 * m.torsoLength - 0.6 * m.extremityStretch);
+        playerGroup.add(tail);
+      }
+
+      playerGroup.position.y = 0.6;
+    }
+
+    function spawnWorldEntities() {
+      // Spawn 14 Food resources (Flora, Meat, Host Cells)
+      const foodTypes = [
+        { type: 'Flora', color: 0x22c55e, diet: 'Herbivore' },
+        { type: 'Meat', color: 0xef4444, diet: 'Carnivore' },
+        { type: 'RNA Host Cell', color: 0x38bdf8, diet: 'Viral/Omnivore' }
+      ];
+      for (let i = 0; i < 14; i++) {
+        const ft = foodTypes[i % foodTypes.length];
+        const mesh = new THREE.Mesh(
+          new THREE.OctahedronGeometry(0.65, 1),
+          new THREE.MeshStandardMaterial({ color: ft.color, emissive: ft.color, emissiveIntensity: 0.35 })
+        );
+        mesh.position.set((Math.random() - 0.5) * 52, 0.4, (Math.random() - 0.5) * 52);
+        mesh.userData = { kind: 'food', foodType: ft.type, diet: ft.diet };
+        scene.add(mesh);
+        foodMeshes.push(mesh);
+      }
+
+      // Spawn Co-Evolving NPC Species in 3D World
+      gameState.npcSpecies.forEach((npc, idx) => {
+        const npcGroup = new THREE.Group();
+        const body = new THREE.Mesh(
+          new THREE.DodecahedronGeometry(1.15, 1),
+          new THREE.MeshStandardMaterial({ color: npc.color, roughness: 0.35, metalness: 0.3 })
+        );
+        npcGroup.add(body);
+        const angle = (idx / gameState.npcSpecies.length) * Math.PI * 2;
+        npcGroup.position.set(Math.cos(angle) * 18, 0.65, Math.sin(angle) * 18);
+        npcGroup.userData = {
+          kind: 'npc',
+          npcIndex: idx,
+          vx: (Math.random() - 0.5) * 0.08,
+          vz: (Math.random() - 0.5) * 0.08
+        };
+        scene.add(npcGroup);
+        npcMeshes.push(npcGroup);
+      });
+    }
+
+    function applyBiomeEnvironmentTo3D(biome) {
+      if (!scene) return;
+      scene.background = new THREE.Color(biome.bgHex);
+      scene.fog.color = new THREE.Color(biome.fogHex);
+      if (window.__floorMesh) {
+        window.__floorMesh.material.color.setHex(biome.groundHex);
+      }
+    }
+
+    function setMoveDir(dx, dz) {
+      moveInput.x = dx;
+      moveInput.z = dz;
+      targetWaypoint = null;
+    }
+
+    function seekNearestNode(kind) {
+      if (!playerGroup) return;
+      const list = kind === 'food' ? foodMeshes : npcMeshes;
+      let best = null;
+      let bestDist = Infinity;
+      list.forEach(m => {
+        const d = playerGroup.position.distanceTo(m.position);
+        if (d < bestDist) {
+          bestDist = d;
+          best = m;
+        }
+      });
+      if (best) {
+        targetWaypoint = best.position.clone();
+        SoundFX.playTone(420, 0.08, 'sine');
+      }
+    }
+
+    function pulseSonarWave() {
+      SoundFX.playTone(660, 0.25, 'sine', 330);
+      seekNearestNode('food');
+      showToast('📡', 'Sensory Sonar Ping locked onto nearest nutrient node!');
+    }
+
+    // =========================================================================
+    // 8. UNIFIED TOUCH (PINCH/STRETCH/TAP) & MOUSE/KEYBOARD CONTROLS
+    // =========================================================================
+    function setupInputListeners(domElement) {
+      window.addEventListener('keydown', e => {
+        const k = e.key.toLowerCase();
+        if (k === 'w' || k === 'arrowup') setMoveDir(moveInput.x, -1);
+        if (k === 's' || k === 'arrowdown') setMoveDir(moveInput.x, 1);
+        if (k === 'a' || k === 'arrowleft') setMoveDir(-1, moveInput.z);
+        if (k === 'd' || k === 'arrowright') setMoveDir(1, moveInput.z);
+      });
+      window.addEventListener('keyup', e => {
+        const k = e.key.toLowerCase();
+        if (['w', 's', 'arrowup', 'arrowdown'].includes(k)) moveInput.z = 0;
+        if (['a', 'd', 'arrowleft', 'arrowright'].includes(k)) moveInput.x = 0;
+      });
+
+      // Mouse drag / Touch pinch-and-stretch in Creature Creator + Click-to-move in World Map
+      let isDragging = false;
+      let prevX = 0;
+      let prevY = 0;
+      let initialPinchDist = null;
+
+      domElement.addEventListener('pointerdown', e => {
+        SoundFX.init();
+        isDragging = true;
+        prevX = e.clientX;
+        prevY = e.clientY;
+
+        if (gameState.activeScreen === 'world') {
+          // Project click to ground plane to guide creature
+          const rect = domElement.getBoundingClientRect();
+          const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+          const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+          const raycaster = new THREE.Raycaster();
+          raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
+          const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+          const hit = new THREE.Vector3();
+          if (raycaster.ray.intersectPlane(plane, hit)) {
+            targetWaypoint = new THREE.Vector3(
+              Math.max(-35, Math.min(35, hit.x)),
+              0.6,
+              Math.max(-35, Math.min(35, hit.z))
+            );
+          }
+        }
+      });
+
+      window.addEventListener('pointermove', e => {
+        if (!isDragging) return;
+        const dx = e.clientX - prevX;
+        const dy = e.clientY - prevY;
+        prevX = e.clientX;
+        prevY = e.clientY;
+
+        if (gameState.activeScreen === 'creator') {
+          // Direct pinch/stretch sculpting on the 3D creature!
+          const region = gameState.sculptRegion;
+          if (region === 'torso') {
+            gameState.morph.torsoLength = Math.max(0.5, Math.min(2.6, gameState.morph.torsoLength + dx * 0.005));
+            gameState.morph.torsoRadius = Math.max(0.5, Math.min(2.2, gameState.morph.torsoRadius - dy * 0.005));
+          } else if (region === 'head') {
+            gameState.morph.headScale = Math.max(0.5, Math.min(2.4, gameState.morph.headScale + (dx - dy) * 0.005));
+          } else if (region === 'extremities') {
+            gameState.morph.extremityStretch = Math.max(0.4, Math.min(2.6, gameState.morph.extremityStretch + (dx - dy) * 0.005));
+          }
+          syncMorphSlidersFromState();
+        }
+      });
+
+      window.addEventListener('pointerup', () => {
+        isDragging = false;
+      });
+
+      // Multi-touch two-finger pinch/stretch gesture handler
+      domElement.addEventListener('touchstart', e => {
+        if (e.touches.length === 2) {
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          initialPinchDist = Math.hypot(dx, dy);
+        }
+      }, { passive: true });
+
+      domElement.addEventListener('touchmove', e => {
+        if (e.touches.length === 2 && initialPinchDist) {
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          const dist = Math.hypot(dx, dy);
+          const delta = (dist - initialPinchDist) * 0.006;
+          initialPinchDist = dist;
+
+          if (gameState.activeScreen === 'creator') {
+            const region = gameState.sculptRegion;
+            if (region === 'torso') gameState.morph.torsoLength = Math.max(0.5, Math.min(2.6, gameState.morph.torsoLength + delta));
+            if (region === 'head') gameState.morph.headScale = Math.max(0.5, Math.min(2.4, gameState.morph.headScale + delta));
+            if (region === 'extremities') gameState.morph.extremityStretch = Math.max(0.4, Math.min(2.6, gameState.morph.extremityStretch + delta));
+            syncMorphSlidersFromState();
+          }
+        }
+      }, { passive: true });
+    }
+
+    function onWindowResize() {
+      if (!camera || !renderer) return;
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // =========================================================================
+    // 9. REAL-TIME SIMULATION & ANIMATION LOOP (BUMP PHYSICS & CO-OP)
+    // =========================================================================
+    let lastClimateTick = 0;
+
+    function animateLoop() {
+      requestAnimationFrame(animateLoop);
+      const dt = Math.min(clock.getDelta(), 0.1);
+      const elapsed = clock.getElapsedTime();
+
+      if (playerGroup) {
+        const loco = computeBiomeLocomotion();
+        const stepSpeed = loco.speed * 2.8 * dt;
+
+        if (gameState.activeScreen === 'creator') {
+          // Rotate creature on turntable in Creature Creator
+          playerGroup.rotation.y += 0.85 * dt;
+          camera.position.lerp(new THREE.Vector3(0, 3.2, 7.5), 0.08);
+          camera.lookAt(playerGroup.position.x, playerGroup.position.y + 0.3, playerGroup.position.z);
+        } else {
+          // World Map movement via keyboard/D-pad or tap waypoint
+          let vx = moveInput.x;
+          let vz = moveInput.z;
+
+          if (targetWaypoint) {
+            const dir = new THREE.Vector3().subVectors(targetWaypoint, playerGroup.position);
+            dir.y = 0;
+            if (dir.length() > 0.6) {
+              dir.normalize();
+              vx = dir.x;
+              vz = dir.z;
+            } else {
+              targetWaypoint = null;
+            }
+          }
+
+          if (Math.abs(vx) > 0.01 || Math.abs(vz) > 0.01) {
+            playerGroup.position.x = Math.max(-38, Math.min(38, playerGroup.position.x + vx * stepSpeed));
+            playerGroup.position.z = Math.max(-38, Math.min(38, playerGroup.position.z + vz * stepSpeed));
+            playerGroup.rotation.y = Math.atan2(vx, vz);
+          }
+
+          // Subtle procedural breathing/swimming bob
+          playerGroup.position.y = 0.65 + Math.sin(elapsed * 4.0) * 0.15;
+
+          // Smooth camera follow
+          const desiredCam = new THREE.Vector3(playerGroup.position.x, 14, playerGroup.position.z + 18);
+          camera.position.lerp(desiredCam, 0.06);
+          camera.lookAt(playerGroup.position);
+        }
+
+        // Check Bump Interactions with Food Nodes
+        foodMeshes.forEach(fMesh => {
+          fMesh.rotation.y += 1.5 * dt;
+          if (playerGroup.position.distanceTo(fMesh.position) < 1.85) {
+            // Bump Food -> Restore Health, Gain DNA, Adapt Diet
+            const gainDna = Math.max(5, Math.round(12 / gameState.settings.resourceScarcity));
+            const heal = Math.round(16 / gameState.settings.resourceScarcity);
+            gameState.dnaPoints += gainDna;
+            gameState.health = Math.min(gameState.maxHealth, gameState.health + heal);
+            gameState.diet = fMesh.userData.diet;
+
+            // Respawn food elsewhere
+            fMesh.position.set((Math.random() - 0.5) * 52, 0.4, (Math.random() - 0.5) * 52);
+            SoundFX.playTone(580, 0.12, 'sine', 780);
+            appendWorldFeed(`Ate ${fMesh.userData.foodType}: +${heal} HP, +${gainDna} DNA (Diet: ${gameState.diet})`);
+            AuditLog.log('INFO', 'luca_engine.world', `Consumed ${fMesh.userData.foodType} (+${gainDna} DNA)`);
+            updateTopHUD();
+          }
+        });
+
+        // Move NPC Creatures & Check Bump Interactions
+        npcMeshes.forEach(nGroup => {
+          const ud = nGroup.userData;
+          const npc = gameState.npcSpecies[ud.npcIndex];
+          nGroup.position.x += ud.vx * npc.spd * 60 * dt * 0.25;
+          nGroup.position.z += ud.vz * npc.spd * 60 * dt * 0.25;
+          if (Math.abs(nGroup.position.x) > 34) ud.vx *= -1;
+          if (Math.abs(nGroup.position.z) > 34) ud.vz *= -1;
+          nGroup.rotation.y += 1.1 * dt;
+
+          if (playerGroup.position.distanceTo(nGroup.position) < 2.2) {
+            const st = computeCreatureStats();
+            const playerPow = st.attackPower + st.infectionPower;
+            const dmg = Math.max(2, Math.round(npc.atk * gameState.settings.predationAggression - st.defense * 0.5));
+            gameState.health = Math.max(10, gameState.health - dmg);
+
+            // Knockback separation so bump is clean
+            const push = new THREE.Vector3().subVectors(nGroup.position, playerGroup.position).normalize().multiplyScalar(5.5);
+            nGroup.position.add(push);
+
+            if (playerPow >= npc.def) {
+              const reward = 20 * npc.level;
+              gameState.dnaPoints += reward;
+              const traitId = npc.dnaTrait;
+              const newlyUnlocked = !gameState.unlockedFeatures.has(traitId);
+              gameState.unlockedFeatures.add(traitId);
+
+              SoundFX.playTone(480, 0.22, 'triangle', 860);
+              const traitName = FEATURE_CATALOG[traitId].name;
+              appendWorldFeed(`Defeated ${npc.name}! +${reward} DNA ${newlyUnlocked ? `& UNLOCKED ${traitName}!` : ''}`);
+              AuditLog.log('INFO', 'luca_engine.world', `Bump victory vs ${npc.name} (+${reward} DNA, trait=${traitId})`);
+              showToast('🧬', newlyUnlocked ? `Assimilated ${traitName} DNA!` : `Won Bump Clash vs ${npc.name}! +${reward} DNA`);
+              renderNPCRoster();
+            } else {
+              SoundFX.playTone(150, 0.2, 'sawtooth', 95);
+              appendWorldFeed(`Bumped predator ${npc.name} (Took -${dmg} HP). Evolve muscles/viral capsid to overpower!`);
+              showToast('💥', `Predator Bump! -${dmg} HP (Need ATK ≥ ${npc.def.toFixed(1)})`);
+            }
+            updateTopHUD();
+          }
+        });
+
+        // Co-Op Ally Symbiosis Orbit
+        if (coopAllyMesh && gameState.settings.coopEnabled) {
+          const orbitAngle = elapsed * 0.9;
+          coopAllyMesh.position.x = playerGroup.position.x + Math.cos(orbitAngle) * 4.2;
+          coopAllyMesh.position.z = playerGroup.position.z + Math.sin(orbitAngle) * 4.2;
+          coopAllyMesh.position.y = 0.8 + Math.sin(elapsed * 3) * 0.25;
+        }
+
+        // Periodic Climate Stress & Co-Op Regen Tick (every 2 seconds)
+        if (elapsed - lastClimateTick > 2.0) {
+          lastClimateTick = elapsed;
+          if (loco.thermalDrain > 0) {
+            gameState.health = Math.max(15, +(gameState.health - loco.thermalDrain).toFixed(1));
+          } else if (gameState.settings.coopEnabled && gameState.health < gameState.maxHealth) {
+            gameState.health = Math.min(gameState.maxHealth, +(gameState.health + 1.5).toFixed(1));
+          }
+          updateTopHUD();
+        }
+      }
+
+      if (monolithMesh) {
+        monolithMesh.children[1].rotation.z += 1.4 * dt;
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    // =========================================================================
+    // 10. IN-BROWSER AUTOMATED REGRESSION SUITE (Mirrors Python unittest)
+    // =========================================================================
+    function runInBrowserRegressionSuite() {
+      let passed = 0;
+      const assert = (cond, name) => {
+        if (cond) {
+          passed += 1;
+          AuditLog.log('PASS', 'tests.regression', `PASS: ${name}`);
+        } else {
+          AuditLog.log('WARN', 'tests.regression', `FAIL: ${name}`);
+        }
+      };
+
+      // Test 1: Cosmic timeline ordering
+      assert(COSMIC_STAGES.length === 5 && COSMIC_STAGES[0].id === 'big_bang', 'test_cosmic_timeline_sequence');
+      // Test 2: RNA base complement rules
+      assert(RNA_COMPLEMENT['A'] === 'U' && RNA_COMPLEMENT['G'] === 'C', 'test_rna_soup_puzzle_complement');
+      // Test 3: Hair makes creature warm (Cold Resistance increases with thermal_fur)
+      const hadFur = gameState.activeFeatures.has('thermal_fur');
+      gameState.activeFeatures.delete('thermal_fur');
+      const coldBefore = computeCreatureStats().coldResistance;
+      gameState.activeFeatures.add('thermal_fur');
+      const coldAfter = computeCreatureStats().coldResistance;
+      if (!hadFur) gameState.activeFeatures.delete('thermal_fur');
+      assert(coldAfter > coldBefore, 'test_hair_makes_warm_stat_impact');
+
+      // Test 4: Fins help swim
+      const hadFins = gameState.activeFeatures.has('hydro_fins');
+      gameState.activeFeatures.delete('hydro_fins');
+      const swimBefore = computeCreatureStats().swimSpeed;
+      gameState.activeFeatures.add('hydro_fins');
+      const swimAfter = computeCreatureStats().swimSpeed;
+      if (!hadFins) gameState.activeFeatures.delete('hydro_fins');
+      assert(swimAfter > swimBefore, 'test_fins_help_swim_stat_impact');
+
+      // Test 5: Pinch & Stretch morphing impacts locomotion and cognition
+      const origHead = gameState.morph.headScale;
+      const cog1 = computeCreatureStats().cognition;
+      gameState.morph.headScale = 2.0;
+      const cog2 = computeCreatureStats().cognition;
+      gameState.morph.headScale = origHead;
+      assert(cog2 > cog1, 'test_pinch_stretch_morphology_stats');
+
+      // Test 6: Biome viscosity & gravity physics
+      assert(BIOMES.hydrothermal_micro.viscosity > BIOMES.pangaea_jungle.viscosity, 'test_biome_viscosity_gradient');
+      // Test 7: Viral evolution path availability
+      assert(FEATURE_CATALOG.viral_capsid.stats.infectionPower > 0, 'test_viral_capsid_evolution_path');
+      // Test 8: NPC co-evolution roster initialized
+      assert(gameState.npcSpecies.length >= 5, 'test_npc_coevolution_roster');
+      // Test 9: Structured logger capacity
+      assert(AuditLog.records.length > 0, 'test_audit_logger_trail');
+
+      document.getElementById('test-pass-pill').textContent = `${passed}/9 Tests Passing`;
+      SoundFX.playTone(620, 0.2, 'triangle', 880);
+      showToast('✅', `Regression Suite Complete: ${passed}/9 Tests Passed!`);
+    }
+
+    // Boot everything on window load
+    window.onload = function () {
+      AuditLog.log('INFO', 'luca_engine.boot', 'Initializing LUCA 3D Evolution Game (WebGL + Python Engine Parity)');
+      renderRNAPuzzleUI();
+      renderNPCRoster();
+      renderCreatorUI();
+      updateTopHUD();
+      initThreeJS();
+      appendWorldFeed('LUCA awakened at Alkaline Hydrothermal Vent! Tap/WASD to forage or open Creature Creator.');
+      runInBrowserRegressionSuite();
+    };
+  </script>
+</body>
+</html>
